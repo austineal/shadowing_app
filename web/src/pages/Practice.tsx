@@ -17,7 +17,7 @@ import {
   updateSegmentList,
 } from "../lib/episodes";
 import { formatTime } from "../lib/format";
-import { isCharBased, languageLabel } from "../lib/languages";
+import { isCharBased, languageLabel, normalizeLanguageCode } from "../lib/languages";
 import { mergeSegments, segmentTokens, splitSegment } from "../lib/segmenter";
 import { loadDefaultSettings, saveDefaultSettings } from "../lib/settings";
 import type { Episode, PracticeSettings, Segment, SegmentsDoc, TimedToken } from "../types";
@@ -130,7 +130,8 @@ function Generate({ uid, episode }: { uid: string; episode: Episode }) {
 }
 
 function effectiveLanguage(episode: Episode): string {
-  return episode.language !== "auto" ? episode.language : (episode.detectedLanguage ?? "auto");
+  if (episode.language !== "auto") return episode.language;
+  return normalizeLanguageCode(episode.detectedLanguage) ?? "auto";
 }
 
 async function generateSegments(uid: string, episode: Episode, settings: PracticeSettings): Promise<void> {

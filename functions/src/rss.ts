@@ -4,6 +4,7 @@ import * as logger from "firebase-functions/logger";
 import { XMLParser } from "fast-xml-parser";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { randomUUID } from "node:crypto";
 import { db, bucket } from "./admin.js";
 import { REGION } from "./config.js";
 import { assertAllowed } from "./auth.js";
@@ -184,7 +185,9 @@ export const importEpisode = onCall(
         file.createWriteStream({
           contentType: finalContentType,
           resumable: false,
-          metadata: { metadata: { uid, episodeId } },
+          // Browser uploads get a download token automatically; server-side writes must set one
+          // so the client's getDownloadURL() works for playback.
+          metadata: { metadata: { uid, episodeId, firebaseStorageDownloadTokens: randomUUID() } },
         }),
       );
     } catch (err) {

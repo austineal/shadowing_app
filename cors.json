@@ -2,7 +2,7 @@
   {
     "origin": ["https://shadowing-practice-app.web.app", "https://shadowing-practice-app.firebaseapp.com", "http://localhost:5173"],
     "method": ["GET", "HEAD"],
-    "responseHeader": ["Content-Type", "Range", "Content-Range", "Accept-Ranges", "Content-Length"],
+    "responseHeader": ["Content-Type", "Content-Length", "Content-Range", "Accept-Ranges", "Range", "Authorization", "X-Firebase-Storage-Version", "X-Firebase-GMPID", "X-Firebase-AppCheck"],
     "maxAgeSeconds": 3600
   }
 ]

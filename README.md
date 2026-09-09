@@ -47,15 +47,22 @@ steps need the Firebase console or your own credentials:
    ```bash
    firebase functions:secrets:set ELEVENLABS_API_KEY
    ```
-5. **Deploy everything:**
+5. **Allow the browser to download from the bucket (CORS).** The Firebase SDK
+   can upload without this, but reading `words.json` and transcripts from the
+   browser fails with `storage/retry-limit-exceeded` until the bucket has a CORS
+   policy. Needs the Google Cloud CLI once:
+   ```bash
+   brew install --cask gcloud-cli
+   gcloud auth login
+   gcloud storage buckets update gs://shadowing-practice-app.firebasestorage.app --cors-file=cors.json
+   ```
+   Add any extra origins you serve the app from to `cors.json` and re-run the last command.
+6. **Deploy everything:**
    ```bash
    npm run deploy
    ```
    The app is then served at https://shadowing-practice-app.web.app. Open it in
    Chrome on Android and choose *Install app* / *Add to Home screen*.
-
-Optional: if you later want offline audio caching, apply `cors.json` to the
-bucket (`gcloud storage buckets update gs://shadowing-practice-app.firebasestorage.app --cors-file=cors.json`).
 
 ## Development
 
