@@ -1,0 +1,21 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Single-user app: only the owner's verified Google account may read or write.
+    // Anyone else with a Google account can sign in, but gets no data access and
+    // cannot trigger paid transcription. Keep this list in sync with the
+    // ALLOWED_EMAILS parameter in functions/.
+    function isAllowedUser() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ['austin.leirvik@gmail.com'];
+    }
+    function isOwner(uid) {
+      return isAllowedUser() && request.auth.uid == uid;
+    }
+
+    match /users/{uid}/{document=**} {
+      allow read, write: if isOwner(uid);
+    }
+  }
+}

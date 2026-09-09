@@ -1,0 +1,20 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isAllowedUser() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ['austin.leirvik@gmail.com'];
+    }
+    function isOwner(uid) {
+      return isAllowedUser() && request.auth.uid == uid;
+    }
+
+    // users/{uid}/episodes/{episodeId}/audio.<ext> | words.json | transcript.txt | aligned.json
+    match /users/{uid}/{allPaths=**} {
+      allow read, delete: if isOwner(uid);
+      // Cap uploads at 1 GiB.
+      allow create, update: if isOwner(uid) && request.resource.size < 1024 * 1024 * 1024;
+    }
+  }
+}

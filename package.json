@@ -1,0 +1,17 @@
+{
+  "name": "shadowing-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix web run dev",
+    "build": "npm --prefix web run build && npm --prefix functions run build",
+    "test": "npm --prefix web test",
+    "typecheck": "npx --prefix web tsc -p web/tsconfig.app.json --noEmit && npm --prefix functions run build",
+    "deploy": "firebase deploy",
+    "deploy:web": "firebase deploy --only hosting",
+    "deploy:functions": "firebase deploy --only functions",
+    "deploy:rules": "firebase deploy --only firestore,storage",
+    "emulators": "firebase emulators:start",
+    "logs": "firebase functions:log"
+  }
+}
