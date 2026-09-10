@@ -82,6 +82,25 @@ Under the hood: the audio file is stored whole in a Cache Storage bucket named
 from it. Word-timing JSON lives in `episode-data` with a network-first policy.
 Both require the bucket CORS policy from setup step 5.
 
+## Background playback (screen off)
+
+Practice keeps running with the phone locked or the app in the background. The
+phrase audio is routed through Web Audio into a MediaStream that a second,
+never-paused audio element plays, so the OS sees one continuous track even
+during the silent gaps between phrases (iOS suspends JavaScript within seconds
+of audio stopping; Android throttles background timers). Phrase ends and gaps
+are timed on the audio clock rather than `setTimeout`. Lock-screen and headset
+controls map to play/pause, next/previous phrase and repeat.
+
+If the browser refuses to play the stream element, audio falls back to direct
+output and background playback is best-effort only.
+
+To test on a device: start auto mode, lock the phone, and leave it for at least
+five minutes (Android's tab freezing kicks in after five minutes in the
+background). Phrases and gaps should keep alternating, and the lock-screen
+controls should skip and repeat phrases. Check with both a saved-offline episode
+and a streamed one, since the service worker serves the former.
+
 ## Development
 
 ```bash
