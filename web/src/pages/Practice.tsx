@@ -4,7 +4,7 @@ import { useEpisode, useSegmentsDoc } from "../hooks/useEpisode";
 import { useSegmentPlayer } from "../hooks/useSegmentPlayer";
 import { alignTranscript } from "../lib/align";
 import {
-  audioUrl,
+  ensureAudioUrl,
   loadText,
   loadTokens,
   loadWordsFile,
@@ -20,6 +20,8 @@ import { formatTime } from "../lib/format";
 import { isCharBased, languageLabel, normalizeLanguageCode } from "../lib/languages";
 import { mergeSegments, segmentTokens, splitSegment } from "../lib/segmenter";
 import { loadDefaultSettings, saveDefaultSettings } from "../lib/settings";
+import { useOnline } from "../lib/offline";
+import { OfflineButton } from "../components/OfflineButton";
 import type { Episode, PracticeSettings, Segment, SegmentsDoc, TimedToken } from "../types";
 
 export default function Practice({ uid }: { uid: string }) {
@@ -177,13 +179,25 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
   const [busy, setBusy] = useState<string>();
   const [notice, setNotice] = useState<string>();
 
+  const online = useOnline();
   useEffect(() => {
     let cancelled = false;
-    audioUrl(episode.audioPath).then((u) => !cancelled && setSrc(u), (e) => setNotice(String(e)));
+    ensureAudioUrl(uid, episode).then(
+      (u) => !cancelled && setSrc(u),
+      (e) =>
+        !cancelled &&
+        setNotice(
+          navigator.onLine
+            ? String(e)
+            : "You're offline and this episode hasn't been opened online yet, so its audio can't be located.",
+        ),
+    );
     return () => {
       cancelled = true;
     };
-  }, [episode.audioPath]);
+    // Only re-run when the path changes; audioUrl arriving later is handled by ensureAudioUrl's early return.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uid, episode.id, episode.audioPath]);
 
   const player = useSegmentPlayer(src, { segments, settings, title: episode.title });
 
@@ -315,6 +329,7 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
         <div style={{ flex: 1, minWidth: 0 }}>
           <h1>{episode.title}</h1>
           <div className="sub">
+            {!online && <span className="pill busy" style={{ marginRight: 6 }}>Offline</span>}
             {languageLabel(language)} · {segments.length} phrases
             {segDoc.source === "transcript" && segDoc.matchRatio !== undefined
               ? ` · transcript ${Math.round(segDoc.matchRatio * 100)}% matched`
@@ -426,6 +441,7 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
 
       {showSettings && (
         <SettingsSheet
+          uid={uid}
           settings={settings}
           segDoc={segDoc}
           episode={episode}
@@ -442,6 +458,7 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
 }
 
 function SettingsSheet(props: {
+  uid: string;
   settings: PracticeSettings;
   segDoc: SegmentsDoc;
   episode: Episode;
@@ -522,6 +539,15 @@ function SettingsSheet(props: {
             </button>
           </div>
         )}
+
+        <hr />
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <span>Offline copy</span>
+          <OfflineButton uid={props.uid} episode={props.episode} />
+        </div>
+        <p className="small muted" style={{ marginTop: 6 }}>
+          Saves the audio and word timings on this device so the episode plays without a connection.
+        </p>
 
         <hr />
         <p className="small muted">

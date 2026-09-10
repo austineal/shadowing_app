@@ -26,6 +26,15 @@ import {
 } from "firebase/storage";
 import { httpsCallable } from "firebase/functions";
 import { db, functions, storage } from "../firebase";
+import {
+  cacheAudio,
+  cachedText,
+  putCachedText,
+  removeCachedAudio,
+  removeCachedText,
+  storageMediaUrl,
+  type ProgressFn,
+} from "./offline";
 import type { Episode, PracticeSettings, Segment, SegmentsDoc, TimedToken, WordsFile } from "../types";
 
 export function episodesCollection(uid: string) {
@@ -163,9 +172,26 @@ export async function saveTranscript(uid: string, episodeId: string, text: strin
   return transcriptPath;
 }
 
+/**
+ * Reads a text/JSON object from Storage. Falls back to the offline cache when the
+ * network (or the auth token refresh it needs) is unavailable.
+ */
 export async function loadText(path: string): Promise<string> {
-  const bytes = await getBytes(ref(storage, path));
-  return new TextDecoder().decode(bytes);
+  const key = storageMediaUrl(path);
+  if (typeof navigator !== "undefined" && !navigator.onLine) {
+    const cached = await cachedText(key);
+    if (cached !== null) return cached;
+  }
+  try {
+    const bytes = await getBytes(ref(storage, path));
+    const text = new TextDecoder().decode(bytes);
+    void putCachedText(key, text).catch(() => undefined);
+    return text;
+  } catch (err) {
+    const cached = await cachedText(key);
+    if (cached !== null) return cached;
+    throw err;
+  }
 }
 
 export async function loadWordsFile(path: string): Promise<WordsFile> {
@@ -183,11 +209,43 @@ export async function saveAlignedTokens(uid: string, episodeId: string, tokens: 
   return path;
 }
 
-export function audioUrl(path: string): Promise<string> {
-  return getDownloadURL(ref(storage, path));
+/** Returns the audio download URL, persisting it on the episode so later (offline) opens need no lookup. */
+export async function ensureAudioUrl(uid: string, episode: Episode): Promise<string> {
+  if (episode.audioUrl) return episode.audioUrl;
+  const url = await getDownloadURL(ref(storage, episode.audioPath));
+  await updateEpisode(uid, episode.id, { audioUrl: url }).catch(() => undefined);
+  return url;
 }
 
-export async function deleteEpisode(uid: string, episodeId: string): Promise<void> {
+/** Downloads the audio and the word timings the episode depends on into the offline caches. */
+export async function cacheEpisodeForOffline(
+  uid: string,
+  episode: Episode,
+  url: string,
+  onProgress?: ProgressFn,
+): Promise<void> {
+  await cacheAudio(url, onProgress);
+  // Word timings: words.json always (needed to build phrases), plus aligned.json if phrases came from a transcript.
+  const paths = new Set<string>();
+  if (episode.wordsPath) paths.add(episode.wordsPath);
+  const seg = await getDoc(segmentsDoc(uid, episode.id)).catch(() => null);
+  const tokensPath = seg?.exists() ? (seg.data() as SegmentsDoc).tokensPath : undefined;
+  if (tokensPath) paths.add(tokensPath);
+  for (const p of paths) {
+    await loadText(p).catch(() => undefined); // loadText writes through to the cache
+  }
+}
+
+export async function removeEpisodeOfflineData(uid: string, episode: Episode): Promise<void> {
+  await removeCachedAudio(episode.audioUrl);
+  for (const p of [episode.wordsPath, `users/${uid}/episodes/${episode.id}/aligned.json`]) {
+    if (p) await removeCachedText(storageMediaUrl(p)).catch(() => undefined);
+  }
+}
+
+export async function deleteEpisode(uid: string, episode: Episode): Promise<void> {
+  const episodeId = episode.id;
+  await removeEpisodeOfflineData(uid, episode).catch(() => undefined);
   const folder = ref(storage, `users/${uid}/episodes/${episodeId}`);
   const listing = await listAll(folder).catch(() => ({ items: [] as ReturnType<typeof ref>[] }));
   await Promise.all(listing.items.map((item) => deleteObject(item).catch(() => undefined)));

@@ -13,6 +13,8 @@ export interface Episode {
   sourceUrl?: string | null;
   feedTitle?: string | null;
   audioPath: string;
+  /** Cached Firebase download URL for the audio, saved after first lookup so offline playback needs no network. */
+  audioUrl?: string;
   wordsPath?: string;
   /** Storage path of a user-supplied transcript (plain text). */
   transcriptPath?: string;

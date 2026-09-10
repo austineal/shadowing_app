@@ -64,6 +64,24 @@ steps need the Firebase console or your own credentials:
    The app is then served at https://shadowing-practice-app.web.app. Open it in
    Chrome on Android and choose *Install app* / *Add to Home screen*.
 
+## Offline use
+
+The app shell is precached by a service worker, and Firestore keeps a local copy
+of your episode list, phrases, settings and position, so anything you have
+opened once works offline. Edits made offline sync when you reconnect.
+
+Audio is not stored automatically because episodes are large. Tap **Save
+offline** on an episode (in the library, or in the practice settings sheet) to
+download its audio and word timings to the device. Saved episodes show
+**✓ Offline**; tap again to remove the copy. The library footer shows how much
+device storage the app is using. Importing and transcribing always need a
+connection.
+
+Under the hood: the audio file is stored whole in a Cache Storage bucket named
+`audio-files`, and the service worker answers the audio element's range requests
+from it. Word-timing JSON lives in `episode-data` with a network-first policy.
+Both require the bucket CORS policy from setup step 5.
+
 ## Development
 
 ```bash
