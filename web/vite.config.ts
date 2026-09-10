@@ -26,9 +26,33 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
-        // Never intercept Firebase / Google API traffic; the SDKs manage their own offline state.
         navigateFallbackDenylist: [/^\/__\//],
-        runtimeCaching: [],
+        runtimeCaching: [
+          {
+            // Episode audio (Firebase Storage download URLs). Full files are put in this cache by
+            // the app's "Save offline" action; the range-requests plugin then serves the <audio>
+            // element's partial requests from it. Only complete (200) responses are ever stored, so
+            // ordinary streaming (206 responses) never pollutes the cache.
+            urlPattern: /^https:\/\/firebasestorage\.googleapis\.com\/v0\/b\/[^/]+\/o\/.*%2Faudio\.[A-Za-z0-9]+\?alt=media/,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "audio-files",
+              rangeRequests: true,
+              cacheableResponse: { statuses: [200] },
+            },
+          },
+          {
+            // Word timings (words.json / aligned.json) read via the Storage SDK. Fresh when online,
+            // cached copy when not.
+            urlPattern: /^https:\/\/firebasestorage\.googleapis\.com\/v0\/b\/[^/]+\/o\/.*%2F(words|aligned)\.json\?alt=media/,
+            handler: "NetworkFirst",
+            options: {
+              cacheName: "episode-data",
+              networkTimeoutSeconds: 5,
+              cacheableResponse: { statuses: [200] },
+            },
+          },
+        ],
       },
     }),
   ],

@@ -1,9 +1,12 @@
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { OfflineButton } from "../components/OfflineButton";
 import { useEpisodes } from "../hooks/useEpisode";
 import { signOut } from "../hooks/useAuth";
 import { deleteEpisode } from "../lib/episodes";
-import { formatDate, formatDuration } from "../lib/format";
+import { formatBytes, formatDate, formatDuration } from "../lib/format";
 import { languageLabel } from "../lib/languages";
+import { storageUsage, useOnline } from "../lib/offline";
 import type { Episode } from "../types";
 
 function StatusPill({ ep }: { ep: Episode }) {
@@ -22,14 +25,28 @@ function StatusPill({ ep }: { ep: Episode }) {
 export default function Library({ uid }: { uid: string }) {
   const { episodes, error } = useEpisodes(uid);
   const nav = useNavigate();
+  const online = useOnline();
+  const [usage, setUsage] = useState<{ usage: number; quota: number } | null>(null);
+  const [usageTick, setUsageTick] = useState(0);
+
+  useEffect(() => {
+    void storageUsage().then(setUsage);
+  }, [episodes?.length, usageTick]);
 
   return (
     <div className="page">
       <header className="topbar">
         <h1>Shadowing</h1>
-        <Link to="/import" className="btn primary small">
-          + Import
-        </Link>
+        {!online && <span className="pill busy">Offline</span>}
+        {online ? (
+          <Link to="/import" className="btn primary small">
+            + Import
+          </Link>
+        ) : (
+          <button className="btn primary small" disabled title="Importing needs a connection">
+            + Import
+          </button>
+        )}
         <button className="btn ghost small" onClick={() => void signOut()} title="Sign out">
           Sign out
         </button>
@@ -62,13 +79,16 @@ export default function Library({ uid }: { uid: string }) {
                   {ep.feedTitle ? <span>{ep.feedTitle}</span> : null}
                   <span>{formatDate(ep.createdAt?.toDate())}</span>
                 </div>
+                <div className="row" style={{ marginTop: 8 }} onClick={(e) => e.stopPropagation()}>
+                  <OfflineButton uid={uid} episode={ep} onChange={() => setUsageTick((t) => t + 1)} />
+                </div>
               </div>
               <button
                 className="btn ghost small danger"
                 onClick={(e) => {
                   e.stopPropagation();
                   if (confirm(`Delete "${ep.title}"? This removes the audio and transcript.`)) {
-                    void deleteEpisode(uid, ep.id);
+                    void deleteEpisode(uid, ep).then(() => setUsageTick((t) => t + 1));
                   }
                 }}
                 aria-label="Delete episode"
@@ -78,6 +98,13 @@ export default function Library({ uid }: { uid: string }) {
             </div>
           ))}
         </div>
+      )}
+
+      {usage && usage.usage > 0 && (
+        <p className="small muted section" style={{ textAlign: "center" }}>
+          Offline storage used on this device: {formatBytes(usage.usage)}
+          {usage.quota ? ` of ${formatBytes(usage.quota)} available` : ""}
+        </p>
       )}
     </div>
   );
