@@ -97,8 +97,10 @@ textarea.input { min-height: 140px; resize: vertical; font-size: 0.95rem; }
 .progress > div { height: 100%; background: var(--accent); transition: width 0.1s linear; }
 
 /* Practice */
-.practice { display: flex; flex-direction: column; height: 100dvh; }
-.transcript { flex: 1; overflow-y: auto; padding: 8px 12px 20px; scroll-padding: 40vh; }
+/* flex: none overrides .page's flex: 1, whose 0% basis would otherwise let the screen grow to the transcript's full height. */
+.practice { display: flex; flex-direction: column; flex: none; height: 100dvh; }
+/* min-height: 0 lets the list shrink so it scrolls internally instead of growing the page and pushing the dock off-screen. */
+.transcript { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 12px 20px; scroll-padding: 40vh; }
 .seg {
   display: block; width: 100%; text-align: left; padding: 9px 12px; margin: 2px 0;
   border-radius: 10px; border: 1px solid transparent; background: transparent; color: var(--text-dim);
@@ -113,6 +115,7 @@ textarea.input { min-height: 140px; resize: vertical; font-size: 0.95rem; }
 .seg-tools button { font-size: 0.7rem; padding: 3px 8px; min-height: 26px; }
 
 .dock {
+  position: sticky; bottom: 0; z-index: 5; flex-shrink: 0;
   border-top: 1px solid var(--border); background: var(--bg-elev);
   padding: 12px 14px calc(12px + var(--safe-bottom));
   display: flex; flex-direction: column; gap: 10px;
