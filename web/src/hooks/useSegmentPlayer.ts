@@ -85,7 +85,8 @@ function schedule(g: Graph | null, seconds: number, cb: () => void): () => void 
  * Drives an <audio> element phrase by phrase.
  * - playSegment(i) seeks to the phrase (minus padding) and plays until its end (plus padding).
  * - In "auto"/"loop" modes, a silent gap proportional to the phrase length follows, then the
- *   next (or same) phrase plays. In "manual" mode playback simply stops.
+ *   next (or same) phrase plays. In "auto" mode the same phrase is played `settings.repeats`
+ *   times (gap after each) before advancing. In "manual" mode playback simply stops.
  * Uses requestAnimationFrame for the progress bar while visible; stopping and gap timing use
  * audio-clock timers so they keep working with the screen off.
  */
@@ -96,6 +97,9 @@ export function useSegmentPlayer(audioSrc: string | undefined, opts: Options) {
   const [index, setIndex] = useState(0);
   const [phase, setPhase] = useState<PlayerPhase>("idle");
   const [progress, setProgress] = useState(0);
+  /** Completed plays of the current phrase in this auto-mode pass (resets on any user navigation). */
+  const [plays, setPlays] = useState(0);
+  const playsRef = useRef(0);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -191,10 +195,16 @@ export function useSegmentPlayer(audioSrc: string | undefined, opts: Options) {
   }, []);
 
   const api = useRef({
-    playSegment: (_i: number) => {},
+    /** keepPlays: true when called by the auto-advance timer, so the repeat count carries over. */
+    playSegment: (_i: number, _keepPlays?: boolean) => {},
     finishSegment: () => {},
     stop: () => {},
   });
+
+  const setPlayCount = (n: number) => {
+    playsRef.current = n;
+    setPlays(n);
+  };
 
   api.current.stop = () => {
     clearTimers();
@@ -218,18 +228,22 @@ export function useSegmentPlayer(audioSrc: string | undefined, opts: Options) {
     const gapSec = Math.max(0.4, ((seg.end - seg.start) / settings.rate) * settings.gapFactor);
     setPhase("gap");
     setProgress(1);
+    const done = settings.mode === "auto" ? playsRef.current + 1 : 0;
+    setPlayCount(done);
     cancelGapRef.current = schedule(graphRef.current, gapSec, () => {
       const s = stateRef.current;
       if (s.settings.mode === "loop") api.current.playSegment(s.index);
+      else if (done < Math.max(1, Math.round(s.settings.repeats))) api.current.playSegment(s.index, true);
       else if (s.index + 1 < s.segments.length) api.current.playSegment(s.index + 1);
       else {
+        setPlayCount(0);
         graphRef.current?.out.pause();
         setPhase("idle");
       }
     });
   };
 
-  api.current.playSegment = (i: number) => {
+  api.current.playSegment = (i: number, keepPlays = false) => {
     const a = audioRef.current;
     const { segments, settings } = stateRef.current;
     const seg = segments[i];
@@ -238,6 +252,7 @@ export function useSegmentPlayer(audioSrc: string | undefined, opts: Options) {
     setIndex(i);
     stateRef.current.index = i;
     setProgress(0);
+    if (!keepPlays) setPlayCount(0);
 
     const pad = settings.paddingMs / 1000;
     const start = Math.max(0, seg.start - pad);
@@ -306,6 +321,7 @@ export function useSegmentPlayer(audioSrc: string | undefined, opts: Options) {
     setIndex(i);
     stateRef.current.index = i;
     setProgress(0);
+    setPlayCount(0);
   }, []);
   const toggle = useCallback(() => {
     if (stateRef.current.index >= stateRef.current.segments.length) return;
@@ -360,6 +376,7 @@ export function useSegmentPlayer(audioSrc: string | undefined, opts: Options) {
     phase,
     playing: phase === "playing",
     progress,
+    plays,
     ready,
     error,
     playSegment,

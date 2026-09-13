@@ -42,7 +42,13 @@ export interface PracticeSettings {
   rate: number;
   /** manual: stop after each phrase. auto: pause for the gap then advance. loop: repeat current. */
   mode: "manual" | "auto" | "loop";
+  /** How many times each phrase plays (with a gap after each) before auto mode advances. */
+  repeats: number;
 }
+
+/** Quick-pick values offered for `repeats`. */
+export const REPEAT_PRESETS = [1, 2, 3, 5, 10] as const;
+export const MAX_REPEATS = 10;
 
 export const DEFAULT_SETTINGS: PracticeSettings = {
   maxPhraseSec: 8,
@@ -51,6 +57,7 @@ export const DEFAULT_SETTINGS: PracticeSettings = {
   gapFactor: 1.3,
   rate: 1,
   mode: "manual",
+  repeats: 1,
 };
 
 /** A word or spacing token with timestamps, as returned by speech-to-text or produced by alignment. */

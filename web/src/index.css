@@ -126,7 +126,7 @@ textarea.input { min-height: 140px; resize: vertical; font-size: 0.95rem; }
 .controls .big { width: 64px; height: 64px; font-size: 1.5rem; }
 .controls .btn.icon { font-size: 1.2rem; }
 .modes { display: flex; gap: 6px; justify-content: center; align-items: center; flex-wrap: wrap; }
-.modes .btn.small.active { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.modes .btn.small.active, .sheet .btn.small.active { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
 
 .sheet-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 20; display: flex; align-items: flex-end; justify-content: center; }
 .sheet {

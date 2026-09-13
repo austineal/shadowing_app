@@ -22,7 +22,7 @@ import { mergeSegments, segmentTokens, splitSegment } from "../lib/segmenter";
 import { loadDefaultSettings, saveDefaultSettings } from "../lib/settings";
 import { useOnline } from "../lib/offline";
 import { OfflineButton } from "../components/OfflineButton";
-import type { Episode, PracticeSettings, Segment, SegmentsDoc, TimedToken } from "../types";
+import { MAX_REPEATS, REPEAT_PRESETS, type Episode, type PracticeSettings, type Segment, type SegmentsDoc, type TimedToken } from "../types";
 
 export default function Practice({ uid }: { uid: string }) {
   const { id = "" } = useParams();
@@ -129,6 +129,12 @@ function Generate({ uid, episode }: { uid: string; episode: Episode }) {
       </div>
     </Shell>
   );
+}
+
+/** Older saved settings have no `repeats`; anything odd collapses to the 1–MAX_REPEATS range. */
+function clampRepeats(n: number | undefined): number {
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(MAX_REPEATS, Math.max(1, Math.round(n as number)));
 }
 
 function effectiveLanguage(episode: Episode): string {
@@ -315,6 +321,7 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
   };
 
   const current = segments[player.index];
+  const repeats = clampRepeats(settings.repeats);
   const modeLabel = useMemo(
     () => ({ manual: "Manual", auto: "Auto-advance", loop: "Loop phrase" })[settings.mode],
     [settings.mode],
@@ -390,6 +397,9 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
         <div className="row small muted" style={{ justifyContent: "space-between" }}>
           <span>
             {player.index + 1} / {segments.length}
+            {settings.mode === "auto" && repeats > 1 && (
+              <span className="muted"> · play {Math.min(player.plays + 1, repeats)} of {repeats}</span>
+            )}
           </span>
           <span>{player.phase === "gap" ? "your turn…" : current ? `${(current.end - current.start).toFixed(1)}s` : ""}</span>
           <span>{formatTime(current?.start)}</span>
@@ -423,6 +433,25 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
               {{ manual: "Manual", auto: "Auto", loop: "Loop" }[m]}
             </button>
           ))}
+          {settings.mode === "auto" && (
+            <select
+              className="input"
+              style={{ width: "auto", padding: "4px 8px", minHeight: 32 }}
+              value={repeats}
+              onChange={(e) => setSettings((s) => ({ ...s, repeats: Number(e.target.value) }))}
+              aria-label="Repeats per phrase"
+              title="How many times each phrase plays before moving on"
+            >
+              {(REPEAT_PRESETS.includes(repeats as (typeof REPEAT_PRESETS)[number])
+                ? REPEAT_PRESETS
+                : [...REPEAT_PRESETS, repeats].sort((a, b) => a - b)
+              ).map((n) => (
+                <option key={n} value={n}>
+                  {n === 1 ? "once" : `${n}× each`}
+                </option>
+              ))}
+            </select>
+          )}
           <select
             className="input"
             style={{ width: "auto", padding: "4px 8px", minHeight: 32 }}
@@ -470,6 +499,7 @@ function SettingsSheet(props: {
   onAttachTranscript: (text: string) => void;
 }) {
   const { settings, onChange } = props;
+  const repeats = clampRepeats(settings.repeats);
   const [maxPhrase, setMaxPhrase] = useState(props.segDoc.maxPhraseSec);
   const [transcript, setTranscript] = useState("");
   const [showTranscript, setShowTranscript] = useState(false);
@@ -493,6 +523,23 @@ function SettingsSheet(props: {
             <span className="muted">{settings.gapFactor.toFixed(1)}× phrase length</span>
           </div>
           <input type="range" min={0.5} max={3} step={0.1} value={settings.gapFactor} onChange={(e) => set({ gapFactor: Number(e.target.value) })} />
+        </div>
+        <div className="slider">
+          <div className="row">
+            <span>Repeats per phrase (Auto-advance)</span>
+            <span className="muted">{repeats === 1 ? "once" : `${repeats}×`}</span>
+          </div>
+          <input type="range" min={1} max={MAX_REPEATS} step={1} value={repeats} onChange={(e) => set({ repeats: Number(e.target.value) })} />
+          <div className="row" style={{ marginTop: 4, justifyContent: "flex-start" }}>
+            {REPEAT_PRESETS.map((n) => (
+              <button key={n} className={`btn small ${repeats === n ? "active" : ""}`} onClick={() => set({ repeats: n })}>
+                {n}×
+              </button>
+            ))}
+          </div>
+          <p className="small muted" style={{ marginTop: 4 }}>
+            In Auto mode each phrase plays this many times, with a pause after each, before moving to the next one.
+          </p>
         </div>
 
         <hr />
