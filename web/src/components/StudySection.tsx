@@ -27,11 +27,11 @@ export function StudySection(props: {
   const st = episode.study;
   const { total, done, voiced, chars } = study.progress;
 
-  const run = async (english?: boolean) => {
+  const run = async (english?: boolean, retry = false) => {
     setBusy(true);
     setError(undefined);
     try {
-      await prepareStudy(episode.id, language, english);
+      await prepareStudy(episode.id, language, english, retry);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -94,7 +94,7 @@ export function StudySection(props: {
           {st.error && done < total && (
             <p className="small error" style={{ marginTop: 6 }}>
               {st.error}{" "}
-              <button className="btn small" disabled={busy} onClick={() => void run()}>
+              <button className="btn small" disabled={busy} onClick={() => void run(undefined, true)}>
                 Retry
               </button>
             </p>
@@ -142,7 +142,7 @@ export function StudySection(props: {
                 {st.audioError && voiced < total && (
                   <p className="small error" style={{ marginTop: 6 }}>
                     {st.audioError}{" "}
-                    <button className="btn small" disabled={busy} onClick={() => void run(true)}>
+                    <button className="btn small" disabled={busy} onClick={() => void run(true, true)}>
                       Retry
                     </button>
                   </p>

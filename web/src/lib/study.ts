@@ -45,16 +45,17 @@ export async function setStudyLevel(uid: string, language: string, level: CefrLe
 }
 
 const prepareStudyFn = httpsCallable<
-  { episodeId: string; language: string; english?: boolean },
+  { episodeId: string; language: string; english?: boolean; retry?: boolean },
   { total: number; missing: number; audio: number }
 >(functions, "prepareStudy");
 
 /**
  * Turns study mode on and queues anything missing (new phrases, a changed level, English audio
- * when requested). Cheap to call again: finished phrases are skipped.
+ * when requested). Cheap to call again: finished phrases are skipped. `retry` re-queues work
+ * whose earlier tasks failed.
  */
-export async function prepareStudy(episodeId: string, language: string, english?: boolean) {
-  return (await prepareStudyFn({ episodeId, language, ...(english !== undefined ? { english } : {}) })).data;
+export async function prepareStudy(episodeId: string, language: string, english?: boolean, retry = false) {
+  return (await prepareStudyFn({ episodeId, language, retry, ...(english !== undefined ? { english } : {}) })).data;
 }
 
 /** Hides study material for the episode. Generated material is kept. */

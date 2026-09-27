@@ -78,7 +78,11 @@ function chunk<T>(list: T[], size: number): T[][] {
   return out;
 }
 
-/** Enqueues a task. The id makes an identical request a no-op while the first is still queued. */
+/**
+ * Enqueues a task. The id makes an identical request a no-op while the first is still queued.
+ * Cloud Tasks also refuses a name for about an hour after its task is deleted, so explicit
+ * retries pass a nonce to get fresh ids.
+ */
 async function enqueue(fn: "studyChunk" | "englishAudio", data: StudyChunkTask | EnglishAudioTask, idSource: string) {
   const id = `${fn}-${createHash("sha256").update(idSource).digest("hex").slice(0, 40)}`;
   const queue = getFunctions().taskQueue(`locations/${REGION}/functions/${fn}`);
@@ -90,9 +94,9 @@ async function enqueue(fn: "studyChunk" | "englishAudio", data: StudyChunkTask |
   }
 }
 
-async function enqueueAudio(uid: string, episodeId: string, keys: string[]) {
+async function enqueueAudio(uid: string, episodeId: string, keys: string[], nonce = "") {
   for (const keys20 of chunk(keys, AUDIO_BATCH)) {
-    await enqueue("englishAudio", { uid, episodeId, keys: keys20 }, `${uid}/${keys20.join(",")}`);
+    await enqueue("englishAudio", { uid, episodeId, keys: keys20 }, `${uid}/${keys20.join(",")}${nonce}`);
   }
 }
 
@@ -120,7 +124,7 @@ async function recordError(uid: string, episodeId: string, field: "error" | "aud
  */
 export const prepareStudy = onCall({ region: REGION, timeoutSeconds: 120 }, async (req) => {
   const uid = assertAllowed(req);
-  const data = (req.data ?? {}) as { episodeId?: unknown; language?: unknown; english?: unknown };
+  const data = (req.data ?? {}) as { episodeId?: unknown; language?: unknown; english?: unknown; retry?: unknown };
   const episodeId = typeof data.episodeId === "string" ? data.episodeId : "";
   const language = typeof data.language === "string" ? data.language : "";
   if (!/^[A-Za-z0-9]{1,64}$/.test(episodeId)) throw new HttpsError("invalid-argument", "episodeId is required.");
@@ -141,6 +145,7 @@ export const prepareStudy = onCall({ region: REGION, timeoutSeconds: 120 }, asyn
   }
 
   const english = typeof data.english === "boolean" ? data.english : epSnap.get("study.english") === true;
+  const nonce = data.retry === true ? `/${Date.now()}` : "";
 
   const seen = new Set<string>();
   const items: PhraseItem[] = [];
@@ -187,10 +192,10 @@ export const prepareStudy = onCall({ region: REGION, timeoutSeconds: 120 }, asyn
     await enqueue(
       "studyChunk",
       { uid, episodeId, language, level, items: items25 },
-      `${uid}/${episodeId}/${level}/${items25.map((it) => it.key).join(",")}`,
+      `${uid}/${episodeId}/${level}/${items25.map((it) => it.key).join(",")}${nonce}`,
     );
   }
-  if (english) await enqueueAudio(uid, episodeId, needAudio);
+  if (english) await enqueueAudio(uid, episodeId, needAudio, nonce);
 
   logger.info("Study queued", { uid, episodeId, total: items.length, missing: missing.length, audio: english ? needAudio.length : 0 });
   return { total: items.length, missing: missing.length, audio: english ? needAudio.length : 0 };
