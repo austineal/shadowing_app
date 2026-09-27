@@ -1,55 +1,59 @@
 import { describe, expect, it } from "vitest";
-import { feedStats, filterEpisodes, listShows, parseFilter, pubTime } from "./organise";
+import { buildLibraryTree, episodeLanguage, feedStats, pubTime, type LibraryNode } from "./organise";
 import type { Episode, Folder } from "../types";
 
 function ep(id: string, extra: Partial<Episode> = {}): Episode {
   return { id, title: id, language: "fr", status: "ready", source: "upload", audioPath: "", createdAt: null, ...extra };
 }
 
-const folders: Folder[] = [{ id: "f1", name: "Welsh", createdAt: null }];
+const radioX = { source: "rss" as const, feedUrl: "https://x/feed", feedTitle: "Radio X" };
+const folders: Folder[] = [
+  { id: "f1", name: "Grammar", language: "fr", createdAt: null },
+  { id: "f2", name: "Empty", language: "cy", createdAt: null },
+];
 const episodes = [
   ep("a", { folderId: "f1" }),
   ep("b"),
   ep("c", { folderId: "gone" }),
-  ep("d", { source: "rss", feedUrl: "https://x/feed", feedTitle: "Radio X" }),
-  ep("e", { source: "rss", feedUrl: "https://x/feed", feedTitle: "Radio X", folderId: "f1" }),
-  ep("f", { source: "rss", feedTitle: "Old show" }),
+  ep("d", radioX),
+  ep("e", { ...radioX, folderId: "f1" }),
+  ep("f", { source: "rss", feedTitle: "Old show", language: "cy" }),
+  ep("g", { language: "auto", detectedLanguage: "jpn" }),
+  ep("h", { language: "auto", status: "transcribing" }),
 ];
-const ids = (list: Episode[]) => list.map((e) => e.id);
 
-describe("filterEpisodes", () => {
-  it("returns everything for all", () => {
-    expect(ids(filterEpisodes(episodes, folders, "all"))).toEqual(["a", "b", "c", "d", "e", "f"]);
-  });
-  it("treats missing and deleted folders as unfiled", () => {
-    expect(ids(filterEpisodes(episodes, folders, "unfiled"))).toEqual(["b", "c", "d", "f"]);
-  });
-  it("filters by folder", () => {
-    expect(ids(filterEpisodes(episodes, folders, "folder:f1"))).toEqual(["a", "e"]);
-  });
-  it("filters by show, falling back to feed title for older imports", () => {
-    expect(ids(filterEpisodes(episodes, folders, "show:https://x/feed"))).toEqual(["d", "e"]);
-    expect(ids(filterEpisodes(episodes, folders, "show:Old show"))).toEqual(["f"]);
-  });
-});
+/** Compact view of the tree: label (count) [episode ids] { children }. */
+function shape(nodes: LibraryNode[]): unknown {
+  return nodes.map((n) => [`${n.label} (${n.count})`, n.episodes.map((e) => e.id), shape(n.children)]);
+}
 
-describe("listShows", () => {
-  it("groups by feed and sorts by title", () => {
-    expect(listShows(episodes)).toEqual([
-      { key: "Old show", title: "Old show", count: 1 },
-      { key: "https://x/feed", title: "Radio X", count: 2 },
+describe("buildLibraryTree", () => {
+  it("nests folders and podcasts under languages and places each episode once", () => {
+    expect(shape(buildLibraryTree(episodes, folders))).toEqual([
+      ["French (5)", ["b", "c"], [
+        ["Grammar (2)", ["a", "e"], []],
+        ["Radio X (1)", ["d"], []],
+      ]],
+      ["Japanese (1)", ["g"], []],
+      ["Welsh (1)", [], [
+        ["Empty (0)", [], []],
+        ["Old show (1)", ["f"], []],
+      ]],
+      ["Other (1)", ["h"], []],
     ]);
   });
+
+  it("puts folders without a language under Other", () => {
+    const tree = buildLibraryTree([], [{ id: "old", name: "Legacy", createdAt: null }]);
+    expect(shape(tree)).toEqual([["Other (0)", [], [["Legacy (0)", [], []]]]]);
+  });
 });
 
-describe("parseFilter", () => {
-  it("accepts known shapes and defaults to all", () => {
-    expect(parseFilter("unfiled")).toBe("unfiled");
-    expect(parseFilter("folder:abc")).toBe("folder:abc");
-    expect(parseFilter("show:https://x/feed")).toBe("show:https://x/feed");
-    expect(parseFilter("folder:")).toBe("all");
-    expect(parseFilter("nonsense")).toBe("all");
-    expect(parseFilter(null)).toBe("all");
+describe("episodeLanguage", () => {
+  it("uses the chosen language, or the normalised detected one for auto", () => {
+    expect(episodeLanguage({ language: "cy" })).toBe("cy");
+    expect(episodeLanguage({ language: "auto", detectedLanguage: "fra" })).toBe("fr");
+    expect(episodeLanguage({ language: "auto" })).toBe("unknown");
   });
 });
 

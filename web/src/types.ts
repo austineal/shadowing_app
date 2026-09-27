@@ -36,6 +36,8 @@ export interface Episode {
 export interface Folder {
   id: string;
   name: string;
+  /** Language the folder sits under in the library tree. */
+  language?: string | null;
   createdAt: Timestamp | null;
 }
 

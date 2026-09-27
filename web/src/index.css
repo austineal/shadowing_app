@@ -144,16 +144,6 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* Library organisation */
-.chips { display: flex; gap: 6px; overflow-x: auto; padding: 12px 14px 0; scrollbar-width: none; }
-.chips::-webkit-scrollbar { display: none; }
-.chip {
-  flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
-  padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-elev); font-size: 0.85rem;
-}
-.chip.active { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
-.chip.add { border-style: dashed; color: var(--text-dim); background: transparent; }
-.chip .count { opacity: 0.65; font-variant-numeric: tabular-nums; }
-.folder-tools { padding: 8px 14px 0; }
 .card .editor { margin-top: 10px; }
 .card .editor .field { margin-bottom: 10px; }
 
@@ -172,3 +162,21 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 }
 .podcast-head { display: flex; gap: 14px; align-items: flex-end; }
 .podcast-head img { width: 72px; height: 72px; border-radius: 12px; object-fit: cover; }
+
+/* Library tree */
+.tree { display: flex; flex-direction: column; padding: 8px 8px 12px; }
+.tree-row { display: flex; align-items: center; gap: 4px; padding-left: calc(var(--depth, 0) * 20px); }
+.tree-toggle {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px;
+  padding: 9px 8px; border: 0; border-radius: 10px; background: transparent; text-align: left;
+}
+.tree-toggle:hover { background: var(--bg-elev); }
+.tree-toggle .caret { width: 1em; color: var(--text-dim); transition: transform 0.15s; }
+.tree-toggle[aria-expanded="true"] .caret { transform: rotate(90deg); }
+.tree-toggle .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-toggle .count { color: var(--text-dim); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.tree-toggle.add { flex: none; color: var(--text-dim); font-size: 0.85rem; padding-left: calc(8px + 1em + 8px); }
+.branch.language > .tree-row .tree-toggle { font-weight: 650; font-size: 1.02rem; }
+.tree-episodes { padding: 4px 6px 8px calc(var(--depth, 0) * 20px + 14px); }
+.tree-actions { padding: 2px 0 8px calc(var(--depth, 0) * 20px + 34px); }
+.tree-note { padding: 2px 0 8px calc(var(--depth, 0) * 20px + 34px); }

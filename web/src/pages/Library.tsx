@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { FolderSelect } from "../components/FolderSelect";
 import { OfflineButton } from "../components/OfflineButton";
 import { useEpisodes } from "../hooks/useEpisode";
 import { useFolders, useSubscriptions } from "../hooks/useLibrary";
 import { signOut } from "../hooks/useAuth";
 import { deleteEpisode, updateEpisode } from "../lib/episodes";
 import { createFolder, deleteFolder, refreshStaleSubscriptions, renameFolder } from "../lib/library";
-import { filterEpisodes, listShows, parseFilter, type LibraryFilter } from "../lib/organise";
+import { buildLibraryTree, episodeLanguage, type LibraryNode } from "../lib/organise";
 import { formatBytes, formatDate, formatDuration } from "../lib/format";
 import { languageLabel } from "../lib/languages";
 import { storageUsage, useOnline } from "../lib/offline";
@@ -25,12 +26,38 @@ function StatusPill({ ep }: { ep: Episode }) {
   }
 }
 
+const EXPANDED_KEY = "shadowing.libraryExpanded";
+
+/** Which tree nodes are open, remembered per device. Until the user toggles anything, languages start open. */
+function useExpanded(defaultOpen: string[]) {
+  const [stored, setStored] = useState<string[] | null>(() => {
+    try {
+      const raw = localStorage.getItem(EXPANDED_KEY);
+      return raw ? (JSON.parse(raw) as string[]) : null;
+    } catch {
+      return null;
+    }
+  });
+  const open = new Set(stored ?? defaultOpen);
+  const toggle = (id: string) => {
+    const next = new Set(open);
+    if (!next.delete(id)) next.add(id);
+    const list = [...next];
+    setStored(list);
+    try {
+      localStorage.setItem(EXPANDED_KEY, JSON.stringify(list));
+    } catch {
+      /* ignore */
+    }
+  };
+  return { open, toggle };
+}
+
 export default function Library({ uid }: { uid: string }) {
   const { episodes, error } = useEpisodes(uid);
   const { folders, error: foldersError } = useFolders(uid);
   const { subscriptions, error: subsError } = useSubscriptions(uid);
   const online = useOnline();
-  const [params, setParams] = useSearchParams();
   const [usage, setUsage] = useState<{ usage: number; quota: number } | null>(null);
   const [usageTick, setUsageTick] = useState(0);
 
@@ -46,22 +73,19 @@ export default function Library({ uid }: { uid: string }) {
     void refreshStaleSubscriptions(uid, subscriptions);
   }, [online, subscriptions, uid]);
 
-  const shows = useMemo(() => listShows(episodes ?? []), [episodes]);
-  let filter = parseFilter(params.get("f"));
-  // A folder or show that has gone away (deleted, or last episode removed) falls back to everything.
-  if (
-    (filter.startsWith("folder:") && folders && !folders.some((f) => `folder:${f.id}` === filter)) ||
-    (filter.startsWith("show:") && episodes && !shows.some((s) => `show:${s.key}` === filter))
-  ) {
-    filter = "all";
-  }
-  const setFilter = (f: LibraryFilter) => setParams(f === "all" ? {} : { f }, { replace: true });
-  const visible = episodes && folders ? filterEpisodes(episodes, folders, filter) : undefined;
-  const currentFolder = filter.startsWith("folder:") ? folders?.find((f) => `folder:${f.id}` === filter) : undefined;
-
-  const addFolder = async () => {
-    const name = prompt("New folder name")?.trim();
-    if (name) setFilter(`folder:${await createFolder(uid, name)}`);
+  const tree = useMemo(
+    () => (episodes && folders ? buildLibraryTree(episodes, folders) : undefined),
+    [episodes, folders],
+  );
+  const { open, toggle } = useExpanded(tree?.map((n) => n.id) ?? []);
+  const subByFeed = useMemo(() => new Map(subscriptions?.map((s) => [s.feedUrl, s.id])), [subscriptions]);
+  const ctx: TreeContext = {
+    uid,
+    folders: folders ?? [],
+    subByFeed,
+    open,
+    toggle,
+    onStorageChange: () => setUsageTick((t) => t + 1),
   };
 
   return (
@@ -87,65 +111,12 @@ export default function Library({ uid }: { uid: string }) {
 
       {subscriptions && subscriptions.length > 0 && <PodcastStrip subscriptions={subscriptions} />}
 
-      {episodes && episodes.length > 0 && folders && (
-        <div className="chips" role="tablist" aria-label="Filter episodes">
-          <Chip active={filter === "all"} onClick={() => setFilter("all")}>
-            All <span className="count">{episodes.length}</span>
-          </Chip>
-          {folders.length > 0 && (
-            <Chip active={filter === "unfiled"} onClick={() => setFilter("unfiled")}>
-              Unfiled
-            </Chip>
-          )}
-          {folders.map((f) => (
-            <Chip key={f.id} active={filter === `folder:${f.id}`} onClick={() => setFilter(`folder:${f.id}`)}>
-              📁 {f.name}
-            </Chip>
-          ))}
-          {shows.map((s) => (
-            <Chip key={s.key} active={filter === `show:${s.key}`} onClick={() => setFilter(`show:${s.key}`)}>
-              🎙 {s.title} <span className="count">{s.count}</span>
-            </Chip>
-          ))}
-          <button className="chip add" onClick={() => void addFolder()}>
-            + Folder
-          </button>
-        </div>
-      )}
-
-      {currentFolder && (
-        <div className="row folder-tools">
-          <span className="small muted">{currentFolder.name}</span>
-          <span className="spacer" />
-          <button
-            className="btn ghost small"
-            onClick={() => {
-              const name = prompt("Rename folder", currentFolder.name)?.trim();
-              if (name && name !== currentFolder.name) void renameFolder(uid, currentFolder.id, name);
-            }}
-          >
-            Rename
-          </button>
-          <button
-            className="btn ghost small danger"
-            onClick={() => {
-              if (confirm(`Delete the folder "${currentFolder.name}"? Its episodes stay in your library, unfiled.`)) {
-                setFilter("all");
-                void deleteFolder(uid, currentFolder.id);
-              }
-            }}
-          >
-            Delete folder
-          </button>
-        </div>
-      )}
-
-      {(episodes === undefined || folders === undefined) && (
+      {tree === undefined && (
         <div className="center">
           <div className="spinner" />
         </div>
       )}
-      {episodes && episodes.length === 0 && (
+      {tree && tree.length === 0 && (
         <div className="empty">
           <p>No episodes yet.</p>
           <p className="small" style={{ marginTop: 8 }}>
@@ -153,19 +124,10 @@ export default function Library({ uid }: { uid: string }) {
           </p>
         </div>
       )}
-      {visible && episodes!.length > 0 && visible.length === 0 && (
-        <p className="empty small">{currentFolder ? "This folder is empty. Move episodes here from their ⋯ menu." : "Nothing here."}</p>
-      )}
-      {visible && visible.length > 0 && (
-        <div className="list">
-          {visible.map((ep) => (
-            <EpisodeCard
-              key={ep.id}
-              uid={uid}
-              ep={ep}
-              folders={folders!}
-              onStorageChange={() => setUsageTick((t) => t + 1)}
-            />
+      {tree && tree.length > 0 && (
+        <div className="tree">
+          {tree.map((n) => (
+            <TreeBranch key={n.id} node={n} depth={0} ctx={ctx} />
           ))}
         </div>
       )}
@@ -180,11 +142,111 @@ export default function Library({ uid }: { uid: string }) {
   );
 }
 
-function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+interface TreeContext {
+  uid: string;
+  folders: Folder[];
+  subByFeed: Map<string, string>;
+  open: Set<string>;
+  toggle: (id: string) => void;
+  onStorageChange: () => void;
+}
+
+const ICONS: Record<LibraryNode["kind"], string> = { language: "🌐", folder: "📁", show: "🎙" };
+
+function TreeBranch({ node, depth, ctx }: { node: LibraryNode; depth: number; ctx: TreeContext }) {
+  const expanded = ctx.open.has(node.id);
+  const [managing, setManaging] = useState(false);
+  const subId = node.feedUrl ? ctx.subByFeed.get(node.feedUrl) : undefined;
+  const indent = { "--depth": depth } as CSSProperties;
+  const folder = node.folder;
+
+  const newFolder = async () => {
+    const name = prompt(`New ${languageLabel(node.language)} folder`)?.trim();
+    if (!name) return;
+    const id = await createFolder(ctx.uid, name, node.language);
+    if (!ctx.open.has(`folder:${id}`)) ctx.toggle(`folder:${id}`);
+  };
+
   return (
-    <button className={`chip${active ? " active" : ""}`} role="tab" aria-selected={active} onClick={onClick}>
-      {children}
-    </button>
+    <div className={`branch ${node.kind}`}>
+      <div className="tree-row" style={indent}>
+        <button className="tree-toggle" aria-expanded={expanded} onClick={() => ctx.toggle(node.id)}>
+          <span className="caret" aria-hidden>
+            ▸
+          </span>
+          <span aria-hidden>{ICONS[node.kind]}</span>
+          <span className="label">{node.label}</span>
+          <span className="count">{node.count}</span>
+        </button>
+        {subId && (
+          <Link to={`/podcast/${subId}`} className="btn ghost small" title="Open podcast feed">
+            Feed ›
+          </Link>
+        )}
+        {folder && (
+          <button
+            className="btn ghost small"
+            aria-label={`Manage folder ${folder.name}`}
+            aria-expanded={managing}
+            onClick={() => setManaging((m) => !m)}
+          >
+            ⋯
+          </button>
+        )}
+      </div>
+
+      {folder && managing && (
+        <div className="row tree-actions" style={indent}>
+          <button
+            className="btn small"
+            onClick={() => {
+              const name = prompt("Rename folder", folder.name)?.trim();
+              if (name && name !== folder.name) void renameFolder(ctx.uid, folder.id, name);
+              setManaging(false);
+            }}
+          >
+            Rename
+          </button>
+          <button
+            className="btn small danger"
+            onClick={() => {
+              if (confirm(`Delete the folder "${folder.name}"? Its episodes stay in your library.`)) {
+                void deleteFolder(ctx.uid, folder.id);
+              }
+            }}
+          >
+            Delete folder
+          </button>
+        </div>
+      )}
+
+      {expanded && (
+        <>
+          {node.children.map((c) => (
+            <TreeBranch key={c.id} node={c} depth={depth + 1} ctx={ctx} />
+          ))}
+          {node.episodes.length > 0 && (
+            <div className="list tree-episodes" style={{ "--depth": depth + 1 } as CSSProperties}>
+              {node.episodes.map((ep) => (
+                <EpisodeCard key={ep.id} ep={ep} parent={node} ctx={ctx} />
+              ))}
+            </div>
+          )}
+          {node.kind === "folder" && node.count === 0 && (
+            <p className="small muted tree-note" style={{ "--depth": depth + 1 } as CSSProperties}>
+              Empty. Move episodes here from their ⋯ menu.
+            </p>
+          )}
+          {node.kind === "language" && node.language !== "unknown" && (
+            <div className="tree-row" style={{ "--depth": depth + 1 } as CSSProperties}>
+              <button className="tree-toggle add" onClick={() => void newFolder()}>
+                + New folder
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 
@@ -202,20 +264,10 @@ function PodcastStrip({ subscriptions }: { subscriptions: Subscription[] }) {
   );
 }
 
-function EpisodeCard({
-  uid,
-  ep,
-  folders,
-  onStorageChange,
-}: {
-  uid: string;
-  ep: Episode;
-  folders: Folder[];
-  onStorageChange: () => void;
-}) {
+function EpisodeCard({ ep, parent, ctx }: { ep: Episode; parent: LibraryNode; ctx: TreeContext }) {
   const nav = useNavigate();
   const [editing, setEditing] = useState(false);
-  const folder = folders.find((f) => f.id === ep.folderId);
+  const lang = episodeLanguage(ep);
 
   return (
     <div
@@ -229,17 +281,23 @@ function EpisodeCard({
         <div className="title">{ep.title}</div>
         <div className="meta">
           <StatusPill ep={ep} />
-          <span>{languageLabel(ep.language === "auto" ? ep.detectedLanguage : ep.language)}</span>
+          {/* The tree already says the language and show; repeat them only where a folder mixes things. */}
+          {lang !== parent.language && lang !== "unknown" ? <span>{languageLabel(lang)}</span> : null}
           {ep.durationSec ? <span>{formatDuration(ep.durationSec)}</span> : null}
-          {ep.feedTitle ? <span>{ep.feedTitle}</span> : null}
-          {folder ? <span>📁 {folder.name}</span> : null}
+          {parent.kind === "folder" && ep.feedTitle ? <span>{ep.feedTitle}</span> : null}
           <span>{formatDate(ep.createdAt?.toDate())}</span>
         </div>
         {editing ? (
-          <EpisodeEditor uid={uid} ep={ep} folders={folders} onDone={() => setEditing(false)} onDeleted={onStorageChange} />
+          <EpisodeEditor
+            uid={ctx.uid}
+            ep={ep}
+            folders={ctx.folders}
+            onDone={() => setEditing(false)}
+            onDeleted={ctx.onStorageChange}
+          />
         ) : (
           <div className="row" style={{ marginTop: 8 }} onClick={(e) => e.stopPropagation()}>
-            <OfflineButton uid={uid} episode={ep} onChange={onStorageChange} />
+            <OfflineButton uid={ctx.uid} episode={ep} onChange={ctx.onStorageChange} />
           </div>
         )}
       </div>
@@ -297,14 +355,7 @@ function EpisodeEditor({
       </div>
       <div className="field">
         <label>Folder</label>
-        <select className="input" value={folderId} onChange={(e) => setFolderId(e.target.value)}>
-          <option value="">Unfiled</option>
-          {folders.map((f) => (
-            <option key={f.id} value={f.id}>
-              {f.name}
-            </option>
-          ))}
-        </select>
+        <FolderSelect folders={folders} value={folderId} onChange={setFolderId} />
       </div>
       {error && <p className="error small">{error}</p>}
       <div className="row">
