@@ -42,6 +42,17 @@ export default defineConfig({
             },
           },
           {
+            // Study-mode clips (voiced translations). Each URL carries its own download token and
+            // a regenerated clip gets a new one, so a cached copy never goes stale.
+            urlPattern: /^https:\/\/firebasestorage\.googleapis\.com\/v0\/b\/[^/]+\/o\/.*%2Fphrases%2F[^?]+\.mp3\?alt=media/,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "study-audio",
+              cacheableResponse: { statuses: [200] },
+              expiration: { maxEntries: 5000 },
+            },
+          },
+          {
             // Word timings (words.json / aligned.json) read via the Storage SDK. Fresh when online,
             // cached copy when not.
             urlPattern: /^https:\/\/firebasestorage\.googleapis\.com\/v0\/b\/[^/]+\/o\/.*%2F(words|aligned)\.json\?alt=media/,

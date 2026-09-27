@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useEpisode, useSegmentsDoc } from "../hooks/useEpisode";
 import { useSegmentPlayer } from "../hooks/useSegmentPlayer";
+import { useStudy, type Study } from "../hooks/useStudy";
 import { alignTranscript } from "../lib/align";
 import {
   ensureAudioUrl,
@@ -22,6 +23,10 @@ import { mergeSegments, segmentTokens, splitSegment } from "../lib/segmenter";
 import { loadDefaultSettings, saveDefaultSettings } from "../lib/settings";
 import { useOnline } from "../lib/offline";
 import { OfflineButton } from "../components/OfflineButton";
+import { StudySection } from "../components/StudySection";
+import { PhraseStudySheet } from "../components/PhraseStudySheet";
+import { visibleNotes } from "../lib/notes";
+import { prepareStudy } from "../lib/study";
 import { MAX_REPEATS, REPEAT_PRESETS, type Episode, type PracticeSettings, type Segment, type SegmentsDoc, type TimedToken } from "../types";
 
 export default function Practice({ uid }: { uid: string }) {
@@ -180,6 +185,8 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
   const [settings, setSettings] = useState<PracticeSettings>(() => ({ ...loadDefaultSettings(), ...episode.settings }));
   const [src, setSrc] = useState<string>();
   const [showSettings, setShowSettings] = useState(false);
+  /** Phrase whose study sheet is open. */
+  const [studyIndex, setStudyIndex] = useState<number>();
   const [editing, setEditing] = useState(false);
   const [tokens, setTokens] = useState<TimedToken[] | null>(null);
   const [busy, setBusy] = useState<string>();
@@ -205,7 +212,18 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid, episode.id, episode.audioPath]);
 
-  const player = useSegmentPlayer(src, { segments, settings, title: episode.title });
+  const study = useStudy(uid, episode, segments, language);
+  const player = useSegmentPlayer(src, { segments, settings, title: episode.title, getClip: study.getClip });
+
+  // Download English clips for the next few phrases so they're decoded before they're due.
+  useEffect(() => {
+    if (settings.english && settings.english !== "off") study.prefetch(player.index);
+  }, [player.index, settings.english, study]);
+
+  /** Queues study material for new phrase texts after the phrases change. */
+  const refreshStudy = () => {
+    if (episode.study?.enabled && language !== "auto") void prepareStudy(episode.id, language).catch(() => undefined);
+  };
 
   // Resume where the user left off (once).
   const resumed = useRef(false);
@@ -246,6 +264,7 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.tagName === "TEXTAREA" || (e.target as HTMLElement)?.tagName === "INPUT") return;
+      if (document.querySelector(".sheet")) return; // a settings or study sheet is open
       if (e.key === " ") {
         e.preventDefault();
         player.toggle();
@@ -267,6 +286,7 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
   const persistSegments = async (next: Segment[], keepIndex: number) => {
     await updateSegmentList(uid, episode.id, next);
     player.select(Math.max(0, Math.min(keepIndex, next.length - 1)));
+    refreshStudy();
   };
 
   const onSplit = async (i: number) => {
@@ -300,6 +320,7 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
       await saveSegments(uid, episode.id, { ...segDoc, segments: next, maxPhraseSec });
       player.select(0);
       setShowSettings(false);
+      refreshStudy();
     } finally {
       setBusy(undefined);
     }
@@ -313,6 +334,7 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
       setTokens(null);
       player.select(0);
       setShowSettings(false);
+      refreshStudy();
     } catch (e) {
       setNotice(e instanceof Error ? e.message : String(e));
     } finally {
@@ -321,6 +343,12 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
   };
 
   const current = segments[player.index];
+  const currentStudy = study.phraseAt(player.index);
+  const openStudy = () => {
+    player.stop();
+    setStudyIndex(player.index);
+  };
+  const sheetPhrase = studyIndex === undefined ? undefined : study.phraseAt(studyIndex);
   const repeats = clampRepeats(settings.repeats);
   const modeLabel = useMemo(
     () => ({ manual: "Manual", auto: "Auto-advance", loop: "Loop phrase" })[settings.mode],
@@ -361,6 +389,10 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
             >
               <span className="t">{formatTime(s.start)}</span>
               {s.text}
+              {(() => {
+                const p = study.phraseAt(i);
+                return p && visibleNotes(p).length > 0 ? <span className="note-dot" aria-label="Has notes" /> : null;
+              })()}
             </button>
             {editing && (
               <div className="seg-tools">
@@ -391,6 +423,7 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
         <div className={`phrase ${player.phase === "gap" ? "gap" : ""}`}>
           {current ? current.text : "—"}
         </div>
+        {settings.showTranslation && currentStudy && <div className="translation">{currentStudy.translation}</div>}
         <div className="progress">
           <div style={{ width: `${Math.round(player.progress * 100)}%` }} />
         </div>
@@ -401,7 +434,15 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
               <span className="muted"> · play {Math.min(player.plays + 1, repeats)} of {repeats}</span>
             )}
           </span>
-          <span>{player.phase === "gap" ? "your turn…" : current ? `${(current.end - current.start).toFixed(1)}s` : ""}</span>
+          <span>
+            {player.phase === "gap"
+              ? "your turn…"
+              : player.phase === "clip"
+                ? "English…"
+                : current
+                  ? `${(current.end - current.start).toFixed(1)}s`
+                  : ""}
+          </span>
           <span>{formatTime(current?.start)}</span>
         </div>
         <div className="controls">
@@ -452,6 +493,11 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
               ))}
             </select>
           )}
+          {study.enabled && (
+            <button className="btn small" disabled={!currentStudy} onClick={openStudy} title="Translation, notes and questions">
+              Study{currentStudy && visibleNotes(currentStudy).length > 0 ? ` · ${visibleNotes(currentStudy).length}` : ""}
+            </button>
+          )}
           <select
             className="input"
             style={{ width: "auto", padding: "4px 8px", minHeight: 32 }}
@@ -468,12 +514,18 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
         </div>
       </div>
 
+      {sheetPhrase && (
+        <PhraseStudySheet uid={uid} episodeId={episode.id} phrase={sheetPhrase} onClose={() => setStudyIndex(undefined)} />
+      )}
+
       {showSettings && (
         <SettingsSheet
           uid={uid}
           settings={settings}
           segDoc={segDoc}
           episode={episode}
+          language={language}
+          study={study}
           modeLabel={modeLabel}
           busy={busy}
           onChange={setSettings}
@@ -491,6 +543,8 @@ function SettingsSheet(props: {
   settings: PracticeSettings;
   segDoc: SegmentsDoc;
   episode: Episode;
+  language: string;
+  study: Study;
   modeLabel: string;
   busy?: string;
   onChange: (s: PracticeSettings) => void;
@@ -586,6 +640,17 @@ function SettingsSheet(props: {
             </button>
           </div>
         )}
+
+        <hr />
+        <h2>Study</h2>
+        <StudySection
+          uid={props.uid}
+          episode={props.episode}
+          language={props.language}
+          study={props.study}
+          settings={settings}
+          onChange={set}
+        />
 
         <hr />
         <div className="row" style={{ justifyContent: "space-between" }}>

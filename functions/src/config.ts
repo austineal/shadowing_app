@@ -16,3 +16,24 @@ export const scribeModelId = defineString("SCRIBE_MODEL_ID", {
   default: "scribe_v1",
   description: "ElevenLabs speech-to-text model id",
 });
+
+/** Anthropic API key for study materials. Set with: firebase functions:secrets:set ANTHROPIC_API_KEY */
+export const anthropicApiKey = defineSecret("ANTHROPIC_API_KEY");
+
+/** Claude model that writes translations and study notes. */
+export const claudeModelId = defineString("CLAUDE_MODEL_ID", {
+  default: "claude-opus-5-5",
+  description: "Claude model id for translations and study notes",
+});
+
+/** ElevenLabs voice that reads English translations. */
+export const englishVoiceId = defineString("ENGLISH_VOICE_ID", {
+  default: "JBFqnCBsd6RMkjVDRZzb",
+  description: "ElevenLabs voice id for English translation audio",
+});
+
+/** ElevenLabs text-to-speech model for English translation audio. */
+export const ttsModelId = defineString("TTS_MODEL_ID", {
+  default: "eleven_flash_v2_5",
+  description: "ElevenLabs text-to-speech model id",
+});
