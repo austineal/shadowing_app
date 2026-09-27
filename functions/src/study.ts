@@ -27,7 +27,7 @@ import {
   ttsModelId,
 } from "./config.js";
 import { assertAllowed } from "./auth.js";
-import { CEFR_LEVELS, studyPhrases, type CefrLevel } from "./claude.js";
+import { CEFR_LEVELS, explain, studyPhrases, type CefrLevel, type StudyNote, type ThreadEntry } from "./claude.js";
 import { synthesizeSpeech } from "./elevenlabs.js";
 
 /** Phrases per Claude request. */
@@ -305,5 +305,88 @@ export const englishAudio = onTaskDispatched<EnglishAudioTask>(
       await recordError(uid, episodeId, "audioError", err);
       throw err;
     }
+  },
+);
+
+/** Earlier questions and answers sent back to Claude with a new question. */
+const THREAD_LIMIT = 20;
+/** Transcript lines either side of the phrase given as context. */
+const CONTEXT_LINES = 4;
+
+/**
+ * Follow-up on one phrase: more detail on a note, a different explanation, or a free question.
+ * The exchange is appended to the phrase doc's `thread` so it's there next time.
+ */
+export const explainPhrase = onCall(
+  { region: REGION, timeoutSeconds: 180, secrets: [anthropicApiKey] },
+  async (req) => {
+    const uid = assertAllowed(req);
+    const data = (req.data ?? {}) as { key?: unknown; episodeId?: unknown; mode?: unknown; note?: unknown; question?: unknown };
+    const key = typeof data.key === "string" && /^[0-9a-f]{32}$/.test(data.key) ? data.key : "";
+    const episodeId = typeof data.episodeId === "string" ? data.episodeId : "";
+    const mode = data.mode;
+    if (!key || !/^[A-Za-z0-9]{1,64}$/.test(episodeId)) throw new HttpsError("invalid-argument", "key and episodeId are required.");
+    if (mode !== "detail" && mode !== "different" && mode !== "question") throw new HttpsError("invalid-argument", "Unknown mode.");
+
+    const snap = await phraseRef(uid, key).get();
+    if (!snap.exists) throw new HttpsError("not-found", "No study material for this phrase yet.");
+    const p = snap.data()!;
+    const notes = (p.notes ?? []) as StudyNote[];
+    const note = typeof data.note === "number" ? notes[data.note] : undefined;
+
+    let label: string;
+    let request: string;
+    if (mode === "question") {
+      const q = typeof data.question === "string" ? data.question.trim().slice(0, 1000) : "";
+      if (!q) throw new HttpsError("invalid-argument", "Question is empty.");
+      label = q;
+      request = q;
+    } else if (note) {
+      const about = `"${note.span}" (${note.title})`;
+      label = mode === "detail" ? `More detail: ${note.span}` : `Explain differently: ${note.span}`;
+      request =
+        mode === "detail"
+          ? `Please explain ${about} in more depth: how it works, when it's used, and a couple more examples.`
+          : `I didn't quite get the explanation of ${about}. Could you explain it another way, from a different angle or with different examples?`;
+    } else {
+      label = mode === "detail" ? "Explain this phrase" : "Explain it differently";
+      request =
+        mode === "detail"
+          ? "Please walk me through this phrase: how it's put together and anything in it I might find tricky."
+          : "Could you explain this phrase another way?";
+    }
+
+    const segSnap = await db.doc(`users/${uid}/episodes/${episodeId}/data/segments`).get();
+    const lines = ((segSnap.get("segments") ?? []) as { text: string }[]).map((s) => normalizePhrase(s.text));
+    const at = lines.indexOf(p.text as string);
+    const context = at < 0 ? p.text : lines.slice(Math.max(0, at - CONTEXT_LINES), at + CONTEXT_LINES + 1).join("\n");
+
+    const history = ((p.thread ?? []) as ThreadEntry[]).slice(-THREAD_LIMIT);
+    let answer: string;
+    try {
+      answer = await explain({
+        apiKey: anthropicApiKey.value(),
+        model: claudeModelId.value(),
+        languageName: languageName(p.lang as string),
+        level: p.level as CefrLevel,
+        phrase: p.text as string,
+        translation: p.translation as string,
+        context,
+        notes,
+        history: history.map((t) => ({ role: t.role, text: t.role === "user" ? (t as ThreadEntry & { request?: string }).request ?? t.text : t.text })),
+        request,
+      });
+    } catch (err) {
+      logger.error("Explain failed", { uid, key, err: String(err) });
+      throw new HttpsError("internal", err instanceof Error ? err.message : String(err));
+    }
+
+    const now = Date.now();
+    const entries = [
+      { role: "user", text: label, request, at: now },
+      { role: "assistant", text: answer, at: now + 1 },
+    ];
+    await phraseRef(uid, key).update({ thread: FieldValue.arrayUnion(...entries) });
+    return { answer };
   },
 );

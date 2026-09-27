@@ -132,3 +132,62 @@ export async function studyPhrases(req: StudyRequest): Promise<PhraseStudy[]> {
     return { translation: p.translation.trim(), literal: p.literal.trim(), notes };
   });
 }
+
+export interface ThreadEntry {
+  role: "user" | "assistant";
+  text: string;
+}
+
+export interface ExplainRequest {
+  apiKey: string;
+  model: string;
+  languageName: string;
+  level: CefrLevel;
+  phrase: string;
+  translation: string;
+  /** Neighbouring transcript lines, with the phrase itself in place. */
+  context: string;
+  notes: StudyNote[];
+  /** Earlier questions and answers about this phrase. */
+  history: ThreadEntry[];
+  request: string;
+}
+
+/** Answers a follow-up question about a phrase. Returns plain text. */
+export async function explain(req: ExplainRequest): Promise<string> {
+  const client = new Anthropic({ apiKey: req.apiKey });
+  const notes = req.notes.map((n) => `- "${n.span}" (${n.kind}, ${n.level}): ${n.title}. ${n.body}`).join("\n");
+  const background = `Phrase: ${req.phrase}
+Translation: ${req.translation}
+${notes ? `Notes already shown to the learner:\n${notes}\n` : ""}
+Surrounding transcript:
+${req.context}`;
+
+  // The background rides on the first user turn so later turns read as a normal conversation.
+  const turns: ThreadEntry[] = [...req.history, { role: "user", text: req.request }];
+  const messages = turns.map((t, i) => ({
+    role: t.role,
+    content: i === 0 ? `${background}\n\n${t.text}` : t.text,
+  }));
+
+  const message = await client.beta.messages
+    .stream({
+      model: req.model,
+      max_tokens: 16000,
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+      output_config: { effort: "medium" },
+      system: `You are a patient ${req.languageName} tutor. An English speaker at CEFR ${req.level} is shadowing a podcast phrase by phrase and has a question about one phrase. Answer in English, pitched at their level, in a short paragraph or two unless they ask for more. Short ${req.languageName} examples with English translations help. Write plain text with blank lines between paragraphs: no headings, bold or bullet markup.`,
+      messages,
+    })
+    .finalMessage();
+
+  if (message.stop_reason === "refusal") throw new Error("Claude declined to answer this one.");
+  const text = message.content
+    .filter((b) => b.type === "text")
+    .map((b) => b.text)
+    .join("")
+    .trim();
+  if (!text) throw new Error("Claude returned no answer.");
+  return text;
+}

@@ -74,6 +74,15 @@ export interface PhraseStudy {
   /** Download URL of the voiced translation; valid only while enAudioText === translation. */
   enAudioUrl?: string;
   enAudioText?: string;
+  /** Follow-up questions and Claude's answers, oldest first. */
+  thread?: ThreadEntry[];
+}
+
+export interface ThreadEntry {
+  role: "user" | "assistant";
+  /** For user entries, a short label of what was asked. */
+  text: string;
+  at: number;
 }
 
 export interface Folder {

@@ -1,4 +1,4 @@
-import { collection, doc, onSnapshot, query, setDoc, where, type Unsubscribe } from "firebase/firestore";
+import { collection, deleteField, doc, onSnapshot, query, setDoc, updateDoc, where, type Unsubscribe } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../firebase";
 import { updateEpisode } from "./episodes";
@@ -56,6 +56,32 @@ const prepareStudyFn = httpsCallable<
  */
 export async function prepareStudy(episodeId: string, language: string, english?: boolean, retry = false) {
   return (await prepareStudyFn({ episodeId, language, retry, ...(english !== undefined ? { english } : {}) })).data;
+}
+
+export type ExplainMode = "detail" | "different" | "question";
+
+const explainPhraseFn = httpsCallable<
+  { key: string; episodeId: string; mode: ExplainMode; note?: number; question?: string },
+  { answer: string }
+>(functions, "explainPhrase", { timeout: 180_000 });
+
+/**
+ * Asks Claude a follow-up about a phrase: more detail on a note (or the whole phrase when `note`
+ * is omitted), a different explanation, or a free question. The answer is also appended to the
+ * phrase's thread, which the live subscription picks up.
+ */
+export async function explainPhrase(params: {
+  key: string;
+  episodeId: string;
+  mode: ExplainMode;
+  note?: number;
+  question?: string;
+}): Promise<string> {
+  return (await explainPhraseFn(params)).data.answer;
+}
+
+export async function clearThread(uid: string, key: string): Promise<void> {
+  await updateDoc(doc(db, "users", uid, "phrases", key), { thread: deleteField() });
 }
 
 /** Hides study material for the episode. Generated material is kept. */

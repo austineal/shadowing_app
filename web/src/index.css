@@ -181,3 +181,17 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 .tree-actions { padding: 2px 0 8px calc(var(--depth, 0) * 20px + 34px); }
 .tree-note { padding: 2px 0 8px calc(var(--depth, 0) * 20px + 34px); }
 .translation { color: var(--text-dim); font-size: 0.95rem; line-height: 1.4; margin: -6px 0 8px; }
+.study-sheet .study-phrase { font-size: 1.2rem; line-height: 1.5; margin-bottom: 6px; }
+.study-sheet mark { background: color-mix(in srgb, var(--accent) 22%, transparent); color: inherit; border-radius: 4px; padding: 0 2px; cursor: pointer; }
+.study-sheet mark.focused { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+.study-sheet .study-translation { color: var(--text-dim); margin-bottom: 4px; }
+.notes { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.note { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.note.focused { border-color: var(--accent); }
+.note-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+.note-head .pill { flex-shrink: 0; color: var(--text-dim); }
+.thread { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.bubble { padding: 8px 12px; border-radius: 12px; font-size: 0.9rem; line-height: 1.45; white-space: pre-wrap; max-width: 92%; }
+.bubble.user { align-self: flex-end; background: var(--accent); color: var(--accent-ink); }
+.bubble.assistant { align-self: flex-start; background: var(--bg-elev2); }
+.seg .note-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-left: 6px; vertical-align: middle; opacity: 0.8; }

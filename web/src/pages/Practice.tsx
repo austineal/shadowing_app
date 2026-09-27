@@ -24,6 +24,8 @@ import { loadDefaultSettings, saveDefaultSettings } from "../lib/settings";
 import { useOnline } from "../lib/offline";
 import { OfflineButton } from "../components/OfflineButton";
 import { StudySection } from "../components/StudySection";
+import { PhraseStudySheet } from "../components/PhraseStudySheet";
+import { visibleNotes } from "../lib/notes";
 import { prepareStudy } from "../lib/study";
 import { MAX_REPEATS, REPEAT_PRESETS, type Episode, type PracticeSettings, type Segment, type SegmentsDoc, type TimedToken } from "../types";
 
@@ -183,6 +185,8 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
   const [settings, setSettings] = useState<PracticeSettings>(() => ({ ...loadDefaultSettings(), ...episode.settings }));
   const [src, setSrc] = useState<string>();
   const [showSettings, setShowSettings] = useState(false);
+  /** Phrase whose study sheet is open. */
+  const [studyIndex, setStudyIndex] = useState<number>();
   const [editing, setEditing] = useState(false);
   const [tokens, setTokens] = useState<TimedToken[] | null>(null);
   const [busy, setBusy] = useState<string>();
@@ -260,6 +264,7 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.tagName === "TEXTAREA" || (e.target as HTMLElement)?.tagName === "INPUT") return;
+      if (document.querySelector(".sheet")) return; // a settings or study sheet is open
       if (e.key === " ") {
         e.preventDefault();
         player.toggle();
@@ -339,6 +344,11 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
 
   const current = segments[player.index];
   const currentStudy = study.phraseAt(player.index);
+  const openStudy = () => {
+    player.stop();
+    setStudyIndex(player.index);
+  };
+  const sheetPhrase = studyIndex === undefined ? undefined : study.phraseAt(studyIndex);
   const repeats = clampRepeats(settings.repeats);
   const modeLabel = useMemo(
     () => ({ manual: "Manual", auto: "Auto-advance", loop: "Loop phrase" })[settings.mode],
@@ -379,6 +389,10 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
             >
               <span className="t">{formatTime(s.start)}</span>
               {s.text}
+              {(() => {
+                const p = study.phraseAt(i);
+                return p && visibleNotes(p).length > 0 ? <span className="note-dot" aria-label="Has notes" /> : null;
+              })()}
             </button>
             {editing && (
               <div className="seg-tools">
@@ -479,6 +493,11 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
               ))}
             </select>
           )}
+          {study.enabled && (
+            <button className="btn small" disabled={!currentStudy} onClick={openStudy} title="Translation, notes and questions">
+              Study{currentStudy && visibleNotes(currentStudy).length > 0 ? ` · ${visibleNotes(currentStudy).length}` : ""}
+            </button>
+          )}
           <select
             className="input"
             style={{ width: "auto", padding: "4px 8px", minHeight: 32 }}
@@ -494,6 +513,10 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
           </select>
         </div>
       </div>
+
+      {sheetPhrase && (
+        <PhraseStudySheet uid={uid} episodeId={episode.id} phrase={sheetPhrase} onClose={() => setStudyIndex(undefined)} />
+      )}
 
       {showSettings && (
         <SettingsSheet
