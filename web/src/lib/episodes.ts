@@ -105,6 +105,7 @@ export interface UploadParams {
   file: File;
   title: string;
   language: string;
+  folderId?: string | null;
   transcriptText?: string;
   onProgress?: (fraction: number) => void;
 }
@@ -130,6 +131,7 @@ export async function uploadEpisode(uid: string, params: UploadParams): Promise<
     language: params.language,
     status: "uploading",
     source: "upload",
+    folderId: params.folderId ?? null,
     audioPath,
     ...(transcriptPath ? { transcriptPath } : {}),
     createdAt: serverTimestamp(),
@@ -278,7 +280,7 @@ export interface FeedResult {
 
 const fetchFeedFn = httpsCallable<{ url: string }, FeedResult>(functions, "fetchFeed");
 const importEpisodeFn = httpsCallable<
-  { audioUrl: string; title: string; language: string; feedTitle?: string; feedUrl?: string },
+  { audioUrl: string; title: string; language: string; feedTitle?: string; feedUrl?: string; folderId?: string | null },
   { episodeId: string }
 >(functions, "importEpisode");
 const retranscribeFn = httpsCallable<{ episodeId: string }, { status: string; error: string | null }>(functions, "retranscribeEpisode");
@@ -293,6 +295,7 @@ export async function importFeedEpisode(params: {
   language: string;
   feedTitle?: string;
   feedUrl?: string;
+  folderId?: string | null;
 }): Promise<string> {
   return (await importEpisodeFn(params)).data.episodeId;
 }

@@ -12,6 +12,10 @@ export interface Episode {
   source: "upload" | "rss";
   sourceUrl?: string | null;
   feedTitle?: string | null;
+  /** RSS feed the episode was imported from; groups episodes by show in the library. */
+  feedUrl?: string | null;
+  /** User folder the episode is filed in (null/absent = unfiled). */
+  folderId?: string | null;
   audioPath: string;
   /** Cached Firebase download URL for the audio, saved after first lookup so offline playback needs no network. */
   audioUrl?: string;
@@ -27,6 +31,32 @@ export interface Episode {
   /** Index of the segment the user was last on. */
   lastSegmentIndex?: number;
   settings?: Partial<PracticeSettings>;
+}
+
+export interface Folder {
+  id: string;
+  name: string;
+  createdAt: Timestamp | null;
+}
+
+/** A podcast the user follows. Stored at users/{uid}/subscriptions/{id}, where id is derived from feedUrl. */
+export interface Subscription {
+  id: string;
+  feedUrl: string;
+  title: string;
+  image?: string | null;
+  /** Language used when importing episodes from this show. */
+  language: string;
+  createdAt: Timestamp | null;
+  /** When the feed was last fetched to look for new episodes. */
+  lastCheckedAt?: Timestamp | null;
+  /** Publish time (ms) of the newest episode seen in the feed. */
+  latestAt: number;
+  /** Episodes published after this time (ms) count as new. Advanced when the user opens the show. */
+  seenUpTo: number;
+  /** Number of episodes published after seenUpTo, as of the last check. */
+  newCount: number;
+  checkError?: string | null;
 }
 
 export interface PracticeSettings {

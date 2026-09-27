@@ -151,6 +151,7 @@ export const importEpisode = onCall(
     const language = typeof data.language === "string" && data.language ? data.language : "auto";
     const feedTitle = typeof data.feedTitle === "string" ? data.feedTitle.slice(0, 300) : undefined;
     const feedUrl = typeof data.feedUrl === "string" ? data.feedUrl.slice(0, 2000) : undefined;
+    const folderId = typeof data.folderId === "string" && /^[A-Za-z0-9]{1,64}$/.test(data.folderId) ? data.folderId : null;
 
     const res = await fetch(audioUrl, { headers: { "user-agent": USER_AGENT }, redirect: "follow" });
     if (!res.ok || !res.body) throw new HttpsError("unavailable", `Audio URL returned HTTP ${res.status}.`);
@@ -172,6 +173,7 @@ export const importEpisode = onCall(
       sourceUrl: audioUrl.toString(),
       feedTitle: feedTitle ?? null,
       feedUrl: feedUrl ?? null,
+      folderId,
       audioPath,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),

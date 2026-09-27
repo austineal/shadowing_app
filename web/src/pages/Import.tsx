@@ -1,28 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { LanguageSelect } from "../components/LanguageSelect";
+import { useFolders, useSubscriptions } from "../hooks/useLibrary";
 import { fetchFeed, importFeedEpisode, uploadEpisode, type FeedResult } from "../lib/episodes";
+import { subscribe } from "../lib/library";
 import { formatDuration, titleFromFilename } from "../lib/format";
-import { LANGUAGES } from "../lib/languages";
 import { loadRecentFeeds, rememberFeed } from "../lib/settings";
 
 const LANG_KEY = "shadowing.lastLanguage";
-
-function LanguageSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <select className="input" value={value} onChange={(e) => onChange(e.target.value)}>
-      {LANGUAGES.map((l) => (
-        <option key={l.code} value={l.code}>
-          {l.label}
-        </option>
-      ))}
-    </select>
-  );
-}
 
 export default function Import({ uid }: { uid: string }) {
   const [tab, setTab] = useState<"upload" | "feed">("upload");
   const [language, setLanguage] = useState(() => localStorage.getItem(LANG_KEY) ?? "fr");
   useEffect(() => localStorage.setItem(LANG_KEY, language), [language]);
+  const { folders } = useFolders(uid);
+  const [folderId, setFolderId] = useState("");
 
   return (
     <div className="page">
@@ -45,13 +37,30 @@ export default function Import({ uid }: { uid: string }) {
           <label>Language</label>
           <LanguageSelect value={language} onChange={setLanguage} />
         </div>
-        {tab === "upload" ? <UploadForm uid={uid} language={language} /> : <FeedForm language={language} />}
+        {folders && folders.length > 0 && (
+          <div className="field">
+            <label>Folder</label>
+            <select className="input" value={folderId} onChange={(e) => setFolderId(e.target.value)}>
+              <option value="">Unfiled</option>
+              {folders.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        {tab === "upload" ? (
+          <UploadForm uid={uid} language={language} folderId={folderId || null} />
+        ) : (
+          <FeedForm uid={uid} language={language} folderId={folderId || null} />
+        )}
       </div>
     </div>
   );
 }
 
-function UploadForm({ uid, language }: { uid: string; language: string }) {
+function UploadForm({ uid, language, folderId }: { uid: string; language: string; folderId: string | null }) {
   const nav = useNavigate();
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
@@ -69,6 +78,7 @@ function UploadForm({ uid, language }: { uid: string; language: string }) {
         file,
         title: title || titleFromFilename(file.name),
         language,
+        folderId,
         transcriptText: transcript.trim() || undefined,
         onProgress: setProgress,
       });
@@ -150,14 +160,20 @@ function stripSubtitleMarkup(text: string): string {
     .replace(/\n{2,}/g, "\n");
 }
 
-function FeedForm({ language }: { language: string }) {
+function FeedForm({ uid, language, folderId }: { uid: string; language: string; folderId: string | null }) {
   const nav = useNavigate();
   const [url, setUrl] = useState("");
   const [feed, setFeed] = useState<FeedResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [importing, setImporting] = useState<string | null>(null);
   const [error, setError] = useState<string>();
-  const recent = loadRecentFeeds();
+  const { subscriptions } = useSubscriptions(uid);
+  const [subscribing, setSubscribing] = useState(false);
+  const subscribedUrls = new Set(subscriptions?.map((s) => s.feedUrl));
+  const recent = loadRecentFeeds().filter((f) => !subscribedUrls.has(f.url));
+  // The URL the current feed was loaded from (the input may since have been edited).
+  const [feedUrl, setFeedUrl] = useState("");
+  const currentSub = subscriptions?.find((s) => s.feedUrl === feedUrl);
 
   const load = async (u: string) => {
     setUrl(u);
@@ -167,6 +183,7 @@ function FeedForm({ language }: { language: string }) {
     try {
       const result = await fetchFeed(u.trim());
       setFeed(result);
+      setFeedUrl(u.trim());
       rememberFeed({ url: u.trim(), title: result.title });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -179,11 +196,24 @@ function FeedForm({ language }: { language: string }) {
     setImporting(audioUrl);
     setError(undefined);
     try {
-      const id = await importFeedEpisode({ audioUrl, title, language, feedTitle: feed?.title, feedUrl: url.trim() });
+      const id = await importFeedEpisode({ audioUrl, title, language, folderId, feedTitle: feed?.title, feedUrl });
       nav(`/episode/${id}`, { replace: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setImporting(null);
+    }
+  };
+
+  const doSubscribe = async () => {
+    if (!feed) return;
+    setSubscribing(true);
+    setError(undefined);
+    try {
+      await subscribe(uid, feedUrl, feed, language);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSubscribing(false);
     }
   };
 
@@ -205,6 +235,18 @@ function FeedForm({ language }: { language: string }) {
           </button>
         </div>
       </div>
+      {subscriptions && subscriptions.length > 0 && !feed && (
+        <div className="field">
+          <label>Your podcasts</label>
+          <div className="row wrap">
+            {subscriptions.map((s) => (
+              <Link key={s.id} to={`/podcast/${s.id}`} className="btn small">
+                {s.title}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
       {recent.length > 0 && !feed && (
         <div className="field">
           <label>Recent feeds</label>
@@ -225,9 +267,25 @@ function FeedForm({ language }: { language: string }) {
       {error && <p className="error small">{error}</p>}
       {feed && (
         <div>
-          <h2 style={{ fontSize: "1rem", margin: "6px 0 10px" }}>
-            {feed.title} <span className="muted small">· {feed.episodes.length} episodes</span>
-          </h2>
+          <div className="row" style={{ margin: "6px 0 10px" }}>
+            <h2 style={{ fontSize: "1rem", flex: 1 }}>
+              {feed.title} <span className="muted small">· {feed.episodes.length} episodes</span>
+            </h2>
+            {currentSub ? (
+              <Link to={`/podcast/${currentSub.id}`} className="btn small">
+                ✓ Subscribed
+              </Link>
+            ) : (
+              <button
+                className="btn small"
+                disabled={subscribing || subscriptions === undefined}
+                onClick={() => void doSubscribe()}
+                title="Keep this podcast in your library and see new episodes as they come out"
+              >
+                + Subscribe
+              </button>
+            )}
+          </div>
           <div className="list" style={{ padding: 0 }}>
             {feed.episodes.map((ep) => (
               <div key={ep.audioUrl} className="card">
