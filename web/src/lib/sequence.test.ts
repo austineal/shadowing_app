@@ -16,12 +16,31 @@ describe("gapSeconds", () => {
 });
 
 describe("stepsAfterSource", () => {
+  const en = { kind: "clip", clip: "en" };
+  const gap = { kind: "gap" };
   it("has no steps in manual mode", () => {
-    expect(stepsAfterSource(s({ mode: "manual" }))).toEqual([]);
+    expect(stepsAfterSource(s({ mode: "manual" }), 1)).toEqual([]);
   });
   it("leaves a gap in auto and loop modes", () => {
-    expect(stepsAfterSource(s({ mode: "auto" }))).toEqual([{ kind: "gap" }]);
-    expect(stepsAfterSource(s({ mode: "loop" }))).toEqual([{ kind: "gap" }]);
+    expect(stepsAfterSource(s({ mode: "auto" }), 1)).toEqual([gap]);
+    expect(stepsAfterSource(s({ mode: "loop" }), 1)).toEqual([gap]);
+  });
+  it("plays English between the phrase and the gap", () => {
+    expect(stepsAfterSource(s({ mode: "auto", english: "each" }), 1)).toEqual([en, gap]);
+    expect(stepsAfterSource(s({ mode: "auto", english: "each" }), 3)).toEqual([en, gap]);
+  });
+  it("plays English only after the first play when set to first", () => {
+    expect(stepsAfterSource(s({ mode: "auto", english: "first" }), 1)).toEqual([en, gap]);
+    expect(stepsAfterSource(s({ mode: "auto", english: "first" }), 2)).toEqual([gap]);
+    expect(stepsAfterSource(s({ mode: "loop", english: "first" }), 2)).toEqual([gap]);
+  });
+  it("plays English then stops in manual mode", () => {
+    expect(stepsAfterSource(s({ mode: "manual", english: "first" }), 1)).toEqual([en]);
+  });
+  it("treats settings saved before English existed as off", () => {
+    const old = { ...DEFAULT_SETTINGS, mode: "auto" } as Partial<PracticeSettings>;
+    delete old.english;
+    expect(stepsAfterSource(old as PracticeSettings, 1)).toEqual([gap]);
   });
 });
 
@@ -30,7 +49,7 @@ describe("nextAction", () => {
     expect(nextAction(s({ mode: "manual" }), 0, 0, 5)).toEqual({ kind: "stop" });
   });
   it("replays forever in loop mode", () => {
-    expect(nextAction(s({ mode: "loop" }), 0, 4, 5)).toEqual({ kind: "replay", keepPlays: false });
+    expect(nextAction(s({ mode: "loop" }), 7, 4, 5)).toEqual({ kind: "replay", keepPlays: true });
   });
   it("repeats in auto mode until the count is reached, then advances", () => {
     const auto = s({ mode: "auto", repeats: 3 });

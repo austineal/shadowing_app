@@ -14,19 +14,27 @@ export function gapSeconds(seg: Segment, settings: PracticeSettings): number {
   return Math.max(0.4, ((seg.end - seg.start) / settings.rate) * settings.gapFactor);
 }
 
-/** Steps played after the source audio of one play. Manual mode stops straight away. */
-export function stepsAfterSource(settings: PracticeSettings): FollowStep[] {
-  if (settings.mode === "manual") return [];
-  return [{ kind: "gap" }];
+/**
+ * Steps played after the source audio of one play (`playNumber` counts from 1). The English
+ * translation comes straight after the phrase, then the pause for the user to speak in, which
+ * manual mode leaves out.
+ */
+export function stepsAfterSource(settings: PracticeSettings, playNumber: number): FollowStep[] {
+  const steps: FollowStep[] = [];
+  if (settings.english === "each" || (settings.english === "first" && playNumber === 1)) {
+    steps.push({ kind: "clip", clip: "en" });
+  }
+  if (settings.mode !== "manual") steps.push({ kind: "gap" });
+  return steps;
 }
 
 /**
  * Decides what follows a completed play. `done` is the number of completed plays of the
- * current phrase in this auto-mode pass (always 0 outside auto mode).
+ * current phrase since the user last navigated.
  */
 export function nextAction(settings: PracticeSettings, done: number, index: number, count: number): NextAction {
   if (settings.mode === "manual") return { kind: "stop" };
-  if (settings.mode === "loop") return { kind: "replay", keepPlays: false };
+  if (settings.mode === "loop") return { kind: "replay", keepPlays: true };
   if (done < Math.max(1, Math.round(settings.repeats))) return { kind: "replay", keepPlays: true };
   if (index + 1 < count) return { kind: "advance" };
   return { kind: "stop" };

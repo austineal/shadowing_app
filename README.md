@@ -28,6 +28,14 @@ status; `users/{uid}/episodes/{id}/data/segments` holds the phrase list. Storage
 holds `audio.<ext>`, `words.json` (ElevenLabs response), optional
 `transcript.txt` and `aligned.json` under the same prefix.
 
+Study mode (translations, notes, English audio) is stored per phrase *text*, not
+per segment, so it survives splits and merges: `users/{uid}/phrases/{key}`, where
+`key` hashes the language and normalised text (`phraseKey` in
+`functions/src/study.ts` and `web/src/lib/study.ts`, which must stay in sync). Each
+phrase doc lists the `episodeIds` that use it. Voiced translations are at
+`users/{uid}/phrases/{key}/en.mp3`. The learner's level per language is in
+`users/{uid}/prefs/study`.
+
 ## One-time setup
 
 The Firebase project `shadowing-practice-app` already exists with a Firestore
@@ -46,6 +54,10 @@ steps need the Firebase console or your own credentials:
 4. **Store the ElevenLabs API key** as a secret (you type it, it never enters the repo):
    ```bash
    firebase functions:secrets:set ELEVENLABS_API_KEY
+   ```
+   Study mode also needs an Anthropic API key:
+   ```bash
+   firebase functions:secrets:set ANTHROPIC_API_KEY
    ```
 5. **Allow the browser to download from the bucket (CORS).** The Firebase SDK
    can upload without this, but reading `words.json` and transcripts from the

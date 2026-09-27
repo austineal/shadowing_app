@@ -180,3 +180,4 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 .tree-episodes { padding: 4px 6px 8px calc(var(--depth, 0) * 20px + 14px); }
 .tree-actions { padding: 2px 0 8px calc(var(--depth, 0) * 20px + 34px); }
 .tree-note { padding: 2px 0 8px calc(var(--depth, 0) * 20px + 34px); }
+.translation { color: var(--text-dim); font-size: 0.95rem; line-height: 1.4; margin: -6px 0 8px; }

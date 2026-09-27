@@ -234,9 +234,9 @@ export function useSegmentPlayer(audioSrc: string | undefined, opts: Options) {
       setPhase("idle");
       return;
     }
-    const done = settings.mode === "auto" ? playsRef.current + 1 : 0;
-    if (settings.mode !== "manual") setPlayCount(done);
-    api.current.runFollow(stepsAfterSource(settings), 0, done);
+    const playNumber = playsRef.current + 1;
+    if (settings.mode !== "manual") setPlayCount(playNumber);
+    api.current.runFollow(stepsAfterSource(settings, playNumber), 0, playNumber);
   };
 
   api.current.runFollow = (steps, k, done) => {
