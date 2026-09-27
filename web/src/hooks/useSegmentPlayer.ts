@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { gapSeconds, nextAction, stepsAfterSource, type ClipKind, type FollowStep } from "../lib/sequence";
 import type { PracticeSettings, Segment } from "../types";
 
-export type PlayerPhase = "idle" | "playing" | "gap";
+/** playing: source audio. clip: an extra clip (translation etc.). gap: silence for the user to speak. */
+export type PlayerPhase = "idle" | "playing" | "clip" | "gap";
 
 interface Options {
   segments: Segment[];
   settings: PracticeSettings;
   title?: string;
+  /** Decoded extra audio for a phrase, if already loaded. Missing clips are skipped. */
+  getClip?: (index: number, clip: ClipKind) => AudioBuffer | undefined;
 }
 
 /**
@@ -84,9 +88,10 @@ function schedule(g: Graph | null, seconds: number, cb: () => void): () => void 
 /**
  * Drives an <audio> element phrase by phrase.
  * - playSegment(i) seeks to the phrase (minus padding) and plays until its end (plus padding).
- * - In "auto"/"loop" modes, a silent gap proportional to the phrase length follows, then the
- *   next (or same) phrase plays. In "auto" mode the same phrase is played `settings.repeats`
- *   times (gap after each) before advancing. In "manual" mode playback simply stops.
+ * - The source audio is followed by the steps from stepsAfterSource (extra clips, then a
+ *   silent gap proportional to the phrase length), after which nextAction decides whether to
+ *   replay, advance or stop. In "auto" mode the same phrase is played `settings.repeats` times
+ *   before advancing; "loop" repeats forever; "manual" stops after the phrase.
  * Uses requestAnimationFrame for the progress bar while visible; stopping and gap timing use
  * audio-clock timers so they keep working with the screen off.
  */
@@ -108,14 +113,15 @@ export function useSegmentPlayer(audioSrc: string | undefined, opts: Options) {
 
   const rafRef = useRef(0);
   const cancelEndRef = useRef<() => void>(() => {});
-  const cancelGapRef = useRef<() => void>(() => {});
+  /** Cancels the running follow step (gap timer or clip). */
+  const cancelStepRef = useRef<() => void>(() => {});
 
   const clearTimers = useCallback(() => {
     cancelAnimationFrame(rafRef.current);
     cancelEndRef.current();
-    cancelGapRef.current();
+    cancelStepRef.current();
     cancelEndRef.current = () => {};
-    cancelGapRef.current = () => {};
+    cancelStepRef.current = () => {};
   }, []);
 
   // Audio element lifecycle.
@@ -197,7 +203,11 @@ export function useSegmentPlayer(audioSrc: string | undefined, opts: Options) {
   const api = useRef({
     /** keepPlays: true when called by the auto-advance timer, so the repeat count carries over. */
     playSegment: (_i: number, _keepPlays?: boolean) => {},
+    /** Called when the phrase's source audio ends. */
     finishSegment: () => {},
+    /** Runs steps[k] and the ones after it; `done` is the completed-play count for nextAction. */
+    runFollow: (_steps: FollowStep[], _k: number, _done: number) => {},
+    afterPlay: (_done: number) => {},
     stop: () => {},
   });
 
@@ -218,29 +228,69 @@ export function useSegmentPlayer(audioSrc: string | undefined, opts: Options) {
     clearTimers();
     a?.pause();
     const { settings, index: i, segments } = stateRef.current;
-    const seg = segments[i];
-    if (!seg || settings.mode === "manual") {
+    setProgress(1);
+    if (!segments[i]) {
       graphRef.current?.out.pause();
       setPhase("idle");
-      setProgress(1);
       return;
     }
-    const gapSec = Math.max(0.4, ((seg.end - seg.start) / settings.rate) * settings.gapFactor);
-    setPhase("gap");
-    setProgress(1);
     const done = settings.mode === "auto" ? playsRef.current + 1 : 0;
-    setPlayCount(done);
-    cancelGapRef.current = schedule(graphRef.current, gapSec, () => {
-      const s = stateRef.current;
-      if (s.settings.mode === "loop") api.current.playSegment(s.index);
-      else if (done < Math.max(1, Math.round(s.settings.repeats))) api.current.playSegment(s.index, true);
-      else if (s.index + 1 < s.segments.length) api.current.playSegment(s.index + 1);
-      else {
-        setPlayCount(0);
-        graphRef.current?.out.pause();
-        setPhase("idle");
+    if (settings.mode !== "manual") setPlayCount(done);
+    api.current.runFollow(stepsAfterSource(settings), 0, done);
+  };
+
+  api.current.runFollow = (steps, k, done) => {
+    const step = steps[k];
+    if (!step) {
+      api.current.afterPlay(done);
+      return;
+    }
+    const advance = () => api.current.runFollow(steps, k + 1, done);
+    const { settings, index: i, segments } = stateRef.current;
+    if (step.kind === "gap") {
+      setPhase("gap");
+      const seg = segments[i];
+      cancelStepRef.current = schedule(graphRef.current, seg ? gapSeconds(seg, settings) : 0.4, advance);
+      return;
+    }
+    // Clips play through the same graph so the background keep-alive stream carries them,
+    // and their end fires on the audio clock like the gap timers.
+    const g = graphRef.current;
+    const buffer = stateRef.current.getClip?.(i, step.clip);
+    if (!g || !buffer || g.ctx.state !== "running") {
+      advance();
+      return;
+    }
+    setPhase("clip");
+    const node = g.ctx.createBufferSource();
+    node.buffer = buffer;
+    node.connect(g.direct ? g.ctx.destination : g.dest);
+    node.onended = () => {
+      node.disconnect();
+      advance();
+    };
+    node.start();
+    cancelStepRef.current = () => {
+      node.onended = null;
+      try {
+        node.stop();
+      } catch {
+        /* already stopped */
       }
-    });
+      node.disconnect();
+    };
+  };
+
+  api.current.afterPlay = (done) => {
+    const s = stateRef.current;
+    const action = nextAction(s.settings, done, s.index, s.segments.length);
+    if (action.kind === "replay") api.current.playSegment(s.index, action.keepPlays);
+    else if (action.kind === "advance") api.current.playSegment(s.index + 1);
+    else {
+      if (s.settings.mode !== "manual") setPlayCount(0);
+      graphRef.current?.out.pause();
+      setPhase("idle");
+    }
   };
 
   api.current.playSegment = (i: number, keepPlays = false) => {
