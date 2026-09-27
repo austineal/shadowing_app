@@ -1,54 +1,95 @@
 import type { Episode, Folder } from "../types";
-
-/** Library filter: everything, unfiled episodes, one folder, or one podcast show. */
-export type LibraryFilter = "all" | "unfiled" | `folder:${string}` | `show:${string}`;
-
-export interface Show {
-  key: string;
-  title: string;
-  count: number;
-}
+import { languageLabel, normalizeLanguageCode } from "./languages";
 
 /** Groups episodes by the podcast they were imported from. */
 export function showKey(ep: Pick<Episode, "feedUrl" | "feedTitle">): string | undefined {
   return ep.feedUrl || ep.feedTitle || undefined;
 }
 
-export function listShows(episodes: Episode[]): Show[] {
-  const byKey = new Map<string, Show>();
+/** The language an episode is filed under: the one chosen at import, or the detected one for auto-detect. */
+export function episodeLanguage(ep: Pick<Episode, "language" | "detectedLanguage">): string {
+  const code = ep.language === "auto" ? ep.detectedLanguage : ep.language;
+  return normalizeLanguageCode(code) ?? "unknown";
+}
+
+/**
+ * A branch of the library tree. Languages are the top level; inside each are the user's
+ * folders, then one node per podcast, then episodes that belong to neither.
+ */
+export interface LibraryNode {
+  id: string;
+  kind: "language" | "folder" | "show";
+  label: string;
+  /** Language code this node sits under (the language itself for language nodes). */
+  language: string;
+  folder?: Folder;
+  /** Feed of a podcast node, when known (older imports only recorded the title). */
+  feedUrl?: string;
+  children: LibraryNode[];
+  episodes: Episode[];
+  /** Episodes in this node and all its descendants. */
+  count: number;
+}
+
+function node(kind: LibraryNode["kind"], id: string, label: string, language: string, folder?: Folder): LibraryNode {
+  return { id, kind, label, language, folder, children: [], episodes: [], count: 0 };
+}
+
+const byLabel = (a: LibraryNode, b: LibraryNode) => a.label.localeCompare(b.label);
+
+/**
+ * Places every episode exactly once. A folder the user filed it in wins; otherwise it goes
+ * under its language, inside its podcast's node if it came from a feed. Folders appear under
+ * their own language even when empty. Episodes keep the order they were given in.
+ */
+export function buildLibraryTree(episodes: Episode[], folders: Folder[]): LibraryNode[] {
+  const languages = new Map<string, LibraryNode>();
+  const language = (code: string) => {
+    let n = languages.get(code);
+    if (!n) languages.set(code, (n = node("language", `lang:${code}`, code === "unknown" ? "Other" : languageLabel(code), code)));
+    return n;
+  };
+  const folderNodes = new Map<string, LibraryNode>();
+  for (const f of folders) {
+    const code = normalizeLanguageCode(f.language ?? undefined) ?? "unknown";
+    const n = node("folder", `folder:${f.id}`, f.name, code, f);
+    folderNodes.set(f.id, n);
+    language(code).children.push(n);
+  }
+  const shows = new Map<string, LibraryNode>();
+
   for (const ep of episodes) {
+    const folder = ep.folderId ? folderNodes.get(ep.folderId) : undefined;
+    if (folder) {
+      folder.episodes.push(ep);
+      continue;
+    }
+    const code = episodeLanguage(ep);
     const key = showKey(ep);
-    if (!key) continue;
-    const show = byKey.get(key);
-    if (show) show.count++;
-    else byKey.set(key, { key, title: ep.feedTitle || key, count: 1 });
+    if (!key) {
+      language(code).episodes.push(ep);
+      continue;
+    }
+    const id = `show:${code}:${key}`;
+    let show = shows.get(id);
+    if (!show) {
+      shows.set(id, (show = node("show", id, ep.feedTitle || key, code)));
+      show.feedUrl = ep.feedUrl ?? undefined;
+      language(code).children.push(show);
+    }
+    show.episodes.push(ep);
   }
-  return [...byKey.values()].sort((a, b) => a.title.localeCompare(b.title));
-}
 
-/** Episodes whose folder no longer exists are treated as unfiled. */
-export function isUnfiled(ep: Episode, folderIds: Set<string>): boolean {
-  return !ep.folderId || !folderIds.has(ep.folderId);
-}
-
-export function filterEpisodes(episodes: Episode[], folders: Folder[], filter: LibraryFilter): Episode[] {
-  if (filter === "all") return episodes;
-  if (filter === "unfiled") {
-    const ids = new Set(folders.map((f) => f.id));
-    return episodes.filter((ep) => isUnfiled(ep, ids));
-  }
-  if (filter.startsWith("folder:")) {
-    const id = filter.slice("folder:".length);
-    return episodes.filter((ep) => ep.folderId === id);
-  }
-  const key = filter.slice("show:".length);
-  return episodes.filter((ep) => showKey(ep) === key);
-}
-
-export function parseFilter(raw: string | null): LibraryFilter {
-  if (raw === "unfiled") return raw;
-  if (raw && /^(folder|show):./.test(raw)) return raw as LibraryFilter;
-  return "all";
+  const finish = (n: LibraryNode): number => {
+    // Folders first, then podcasts, each alphabetical.
+    n.children.sort((a, b) => (a.kind === b.kind ? byLabel(a, b) : a.kind === "folder" ? -1 : 1));
+    n.count = n.episodes.length + n.children.reduce((sum, c) => sum + finish(c), 0);
+    return n.count;
+  };
+  const roots = [...languages.values()];
+  roots.forEach(finish);
+  // "Other" last: episodes whose language isn't detected yet, and folders made before folders had a language.
+  return roots.sort((a, b) => (a.language === "unknown" ? 1 : b.language === "unknown" ? -1 : byLabel(a, b)));
 }
 
 /** Publish time in ms, or 0 when the feed omits or garbles the date. */

@@ -32,8 +32,8 @@ export function subscribeFolders(uid: string, cb: (folders: Folder[]) => void, o
   return onSnapshot(q, (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Folder, "id">) }))), onError);
 }
 
-export async function createFolder(uid: string, name: string): Promise<string> {
-  const ref = await addDoc(foldersCollection(uid), { name: name.trim(), createdAt: serverTimestamp() });
+export async function createFolder(uid: string, name: string, language: string): Promise<string> {
+  const ref = await addDoc(foldersCollection(uid), { name: name.trim(), language, createdAt: serverTimestamp() });
   return ref.id;
 }
 

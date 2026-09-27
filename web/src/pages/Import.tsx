@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { FolderSelect } from "../components/FolderSelect";
 import { LanguageSelect } from "../components/LanguageSelect";
 import { useFolders, useSubscriptions } from "../hooks/useLibrary";
 import { fetchFeed, importFeedEpisode, uploadEpisode, type FeedResult } from "../lib/episodes";
@@ -35,19 +36,23 @@ export default function Import({ uid }: { uid: string }) {
       <div className="section">
         <div className="field">
           <label>Language</label>
-          <LanguageSelect value={language} onChange={setLanguage} />
+          <LanguageSelect
+            value={language}
+            onChange={(v) => {
+              setLanguage(v);
+              setFolderId(""); // folders belong to a language
+            }}
+          />
         </div>
-        {folders && folders.length > 0 && (
+        {folders && folders.some((f) => language === "auto" || f.language === language) && (
           <div className="field">
             <label>Folder</label>
-            <select className="input" value={folderId} onChange={(e) => setFolderId(e.target.value)}>
-              <option value="">Unfiled</option>
-              {folders.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.name}
-                </option>
-              ))}
-            </select>
+            <FolderSelect
+              folders={folders}
+              value={folderId}
+              onChange={setFolderId}
+              language={language === "auto" ? undefined : language}
+            />
           </div>
         )}
         {tab === "upload" ? (
