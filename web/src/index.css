@@ -142,3 +142,33 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 
 .spinner { width: 22px; height: 22px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Library organisation */
+.chips { display: flex; gap: 6px; overflow-x: auto; padding: 12px 14px 0; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chip {
+  flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-elev); font-size: 0.85rem;
+}
+.chip.active { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+.chip.add { border-style: dashed; color: var(--text-dim); background: transparent; }
+.chip .count { opacity: 0.65; font-variant-numeric: tabular-nums; }
+.folder-tools { padding: 8px 14px 0; }
+.card .editor { margin-top: 10px; }
+.card .editor .field { margin-bottom: 10px; }
+
+.podcasts { display: flex; gap: 12px; overflow-x: auto; padding: 14px 14px 2px; scrollbar-width: none; }
+.podcasts::-webkit-scrollbar { display: none; }
+.podcast-tile { position: relative; flex-shrink: 0; width: 84px; display: flex; flex-direction: column; gap: 6px; color: var(--text); }
+.podcast-tile img, .podcast-tile .art-fallback {
+  width: 84px; height: 84px; border-radius: 12px; object-fit: cover; background: var(--bg-elev2); border: 1px solid var(--border);
+}
+.podcast-tile .art-fallback { display: flex; align-items: center; justify-content: center; font-size: 2rem; }
+.podcast-tile .name { font-size: 0.75rem; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.podcast-tile .badge {
+  position: absolute; top: -5px; right: -5px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px;
+  background: var(--accent); color: var(--accent-ink); font-size: 0.75rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; border: 2px solid var(--bg);
+}
+.podcast-head { display: flex; gap: 14px; align-items: flex-end; }
+.podcast-head img { width: 72px; height: 72px; border-radius: 12px; object-fit: cover; }

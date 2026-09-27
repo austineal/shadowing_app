@@ -4,6 +4,7 @@ import SignIn from "./pages/SignIn";
 import Library from "./pages/Library";
 import Import from "./pages/Import";
 import Practice from "./pages/Practice";
+import Podcast from "./pages/Podcast";
 
 export default function App() {
   const user = useAuth();
@@ -22,6 +23,7 @@ export default function App() {
         <Route path="/" element={<Library uid={uid} />} />
         <Route path="/import" element={<Import uid={uid} />} />
         <Route path="/episode/:id" element={<Practice uid={uid} />} />
+        <Route path="/podcast/:id" element={<Podcast uid={uid} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>
