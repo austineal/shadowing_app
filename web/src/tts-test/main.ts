@@ -176,16 +176,20 @@ async function runNote(enVoice: string, frVoice: string) {
   let ei = 0;
   let fi = 0;
   for (const p of NOTE_PARTS) pieces.push(p.lang === "en" ? enBufs[ei++] : frBufs[fi++]);
-  const rate = ctx.sampleRate;
-  const gap = Math.round(0.18 * rate);
-  const len = pieces.reduce((n, b) => n + Math.round(b.duration * rate) + gap, 0);
-  const joined = ctx.createBuffer(1, len, rate);
-  const data = joined.getChannelData(0);
+  // Mix the pieces on an offline context so each is resampled from its voice's rate (22.05 kHz
+  // for Piper medium voices) rather than copied sample-for-sample into a buffer at another rate.
+  const gap = 0.18;
+  const total = pieces.reduce((t, b) => t + b.duration + gap, 0);
+  const mix = new OfflineAudioContext(1, Math.ceil(total * ctx.sampleRate), ctx.sampleRate);
   let at = 0;
   for (const b of pieces) {
-    data.set(b.getChannelData(0).subarray(0, Math.round(b.duration * rate)), at);
-    at += Math.round(b.duration * rate) + gap;
+    const src = mix.createBufferSource();
+    src.buffer = b;
+    src.connect(mix.destination);
+    src.start(at);
+    at += b.duration + gap;
   }
+  const joined = await mix.startRendering();
   rows.push({ voiceId: `note:${enVoice}+${frVoice}`, text: NOTE_PARTS.map((p) => p.text).join(" "), genMs, audioSec: +joined.duration.toFixed(2) });
   renderRow(`note:${enVoice}+${frVoice}`, NOTE_PARTS.map((p) => p.text).join(" "), joined, genMs);
   status.textContent = "Done.";
