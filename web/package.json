@@ -12,6 +12,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@mintplex-labs/piper-tts-web": "^1.0.5",
     "diff": "^9.0.0",
     "firebase": "^12.18.0",
     "react": "^19.2.8",

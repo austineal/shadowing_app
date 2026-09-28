@@ -67,5 +67,11 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    rollupOptions: {
+      // tts-test.html is a throwaway on-device TTS benchmark page.
+      input: { main: "index.html", ttsTest: "tts-test.html" },
+    },
+  },
   server: { port: 5173 },
 });
