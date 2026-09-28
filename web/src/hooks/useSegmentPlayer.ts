@@ -9,9 +9,15 @@ interface Options {
   segments: Segment[];
   settings: PracticeSettings;
   title?: string;
-  /** Decoded extra audio for a phrase, if already loaded. Missing clips are skipped. */
-  getClip?: (index: number, clip: ClipKind) => AudioBuffer | undefined;
+  /**
+   * Extra audio for a phrase: the clip, a promise of one still being prepared (waited for up to
+   * CLIP_WAIT_SEC), or undefined to skip it.
+   */
+  getClip?: (index: number, clip: ClipKind) => AudioBuffer | Promise<AudioBuffer | undefined> | undefined;
 }
+
+/** How long a clip that is still being generated may hold up playback before it's skipped. */
+const CLIP_WAIT_SEC = 8;
 
 /**
  * Background-playback graph.
@@ -256,29 +262,55 @@ export function useSegmentPlayer(audioSrc: string | undefined, opts: Options) {
     // Clips play through the same graph so the background keep-alive stream carries them,
     // and their end fires on the audio clock like the gap timers.
     const g = graphRef.current;
-    const buffer = stateRef.current.getClip?.(i, step.clip);
-    if (!g || !buffer || g.ctx.state !== "running") {
+    const clip = stateRef.current.getClip?.(i, step.clip);
+    if (!g || !clip || g.ctx.state !== "running") {
       advance();
       return;
     }
     setPhase("clip");
-    const node = g.ctx.createBufferSource();
-    node.buffer = buffer;
-    node.connect(g.direct ? g.ctx.destination : g.dest);
-    node.onended = () => {
-      node.disconnect();
+    const playBuffer = (buffer: AudioBuffer) => {
+      const node = g.ctx.createBufferSource();
+      node.buffer = buffer;
+      node.connect(g.direct ? g.ctx.destination : g.dest);
+      node.onended = () => {
+        node.disconnect();
+        advance();
+      };
+      node.start();
+      cancelStepRef.current = () => {
+        node.onended = null;
+        try {
+          node.stop();
+        } catch {
+          /* already stopped */
+        }
+        node.disconnect();
+      };
+    };
+    if (clip instanceof AudioBuffer) {
+      playBuffer(clip);
+      return;
+    }
+    // Still being generated. The keep-alive stream keeps the page running while we wait, and the
+    // timeout runs on the audio clock so it still fires with the screen off.
+    let settled = false;
+    const cancelTimeout = schedule(g, CLIP_WAIT_SEC, () => {
+      if (settled) return;
+      settled = true;
       advance();
-    };
-    node.start();
+    });
     cancelStepRef.current = () => {
-      node.onended = null;
-      try {
-        node.stop();
-      } catch {
-        /* already stopped */
-      }
-      node.disconnect();
+      settled = true;
+      cancelTimeout();
     };
+    const finish = (buffer: AudioBuffer | undefined) => {
+      if (settled) return;
+      settled = true;
+      cancelTimeout();
+      if (buffer) playBuffer(buffer);
+      else advance();
+    };
+    clip.then(finish, () => finish(undefined));
   };
 
   api.current.afterPlay = (done) => {

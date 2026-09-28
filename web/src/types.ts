@@ -40,13 +40,10 @@ export type CefrLevel = (typeof CEFR_LEVELS)[number];
 /** Study-mode state on the episode document. Written by the prepareStudy function. */
 export interface EpisodeStudy {
   enabled: boolean;
-  /** English translation audio was requested (costs TTS characters, so off unless asked for). */
-  english: boolean;
   language: string;
   /** The learner level the notes were generated for. */
   level: CefrLevel;
   error?: string | null;
-  audioError?: string | null;
 }
 
 export interface StudyNote {
@@ -71,9 +68,6 @@ export interface PhraseStudy {
   literal: string;
   notes: StudyNote[];
   episodeIds: string[];
-  /** Download URL of the voiced translation; valid only while enAudioText === translation. */
-  enAudioUrl?: string;
-  enAudioText?: string;
   /** Follow-up questions and Claude's answers, oldest first. */
   thread?: ThreadEntry[];
 }
@@ -134,6 +128,8 @@ export interface PracticeSettings {
   repeats: number;
   /** When the English translation audio plays, between the phrase and the pause (study mode). */
   english: "off" | "first" | "each";
+  /** Piper voice (on-device TTS) that reads the English. */
+  englishVoice: string;
   /** Show the translation under the current phrase (study mode). */
   showTranslation: boolean;
 }
@@ -153,6 +149,7 @@ export const DEFAULT_SETTINGS: PracticeSettings = {
   slowPlays: 2,
   slowRate: 0.75,
   english: "off",
+  englishVoice: "en_GB-alba-medium",
   showTranslation: false,
 };
 

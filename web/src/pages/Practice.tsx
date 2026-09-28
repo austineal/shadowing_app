@@ -28,6 +28,7 @@ import { StudySection } from "../components/StudySection";
 import { PhraseStudySheet } from "../components/PhraseStudySheet";
 import { visibleNotes } from "../lib/notes";
 import { prepareStudy } from "../lib/study";
+import { DEFAULT_ENGLISH_VOICE } from "../lib/tts/client";
 import { MAX_REPEATS, REPEAT_PRESETS, type Episode, type PracticeSettings, type Segment, type SegmentsDoc, type TimedToken } from "../types";
 
 export default function Practice({ uid }: { uid: string }) {
@@ -213,7 +214,7 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid, episode.id, episode.audioPath]);
 
-  const study = useStudy(uid, episode, segments, language);
+  const study = useStudy(uid, episode, segments, language, settings.englishVoice ?? DEFAULT_ENGLISH_VOICE);
   const player = useSegmentPlayer(src, { segments, settings, title: episode.title, getClip: study.getClip });
 
   // Download English clips for the next few phrases so they're decoded before they're due.

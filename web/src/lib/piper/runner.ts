@@ -28,6 +28,11 @@ export function voicePath(voiceId: string): string {
   return `${locale.split("_")[0]}/${locale}/${name}/${quality}/${voiceId}`;
 }
 
+/** URL of a voice's .onnx model (its config is the same URL plus .json). Also its cache key. */
+export function voiceModelUrl(voiceId: string): string {
+  return `${VOICES_BASE}/${voicePath(voiceId)}.onnx`;
+}
+
 async function fetchCached(url: string, onProgress?: ProgressFn): Promise<Response> {
   const cache = typeof caches !== "undefined" ? await caches.open(VOICE_CACHE) : undefined;
   const hit = await cache?.match(url);
@@ -95,9 +100,8 @@ export class PiperVoice {
     ort.env.wasm.wasmPaths = ORT_WASM_BASE;
     // Threads need cross-origin isolation (SharedArrayBuffer); without it ORT runs single-threaded.
     ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 1) : 1;
-    const base = `${VOICES_BASE}/${voicePath(voiceId)}`;
-    const config = (await (await fetchCached(`${base}.onnx.json`)).json()) as VoiceConfig;
-    const model = await (await fetchCached(`${base}.onnx`, onProgress)).arrayBuffer();
+    const config = (await (await fetchCached(`${voiceModelUrl(voiceId)}.json`)).json()) as VoiceConfig;
+    const model = await (await fetchCached(voiceModelUrl(voiceId), onProgress)).arrayBuffer();
     const [session] = await Promise.all([
       ort.InferenceSession.create(model, { executionProviders: ["wasm"] }),
       getPhonemizer(),

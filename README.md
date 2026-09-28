@@ -32,9 +32,10 @@ Study mode (translations, notes, English audio) is stored per phrase *text*, not
 per segment, so it survives splits and merges: `users/{uid}/phrases/{key}`, where
 `key` hashes the language and normalised text (`phraseKey` in
 `functions/src/study.ts` and `web/src/lib/study.ts`, which must stay in sync). Each
-phrase doc lists the `episodeIds` that use it. Voiced translations are at
-`users/{uid}/phrases/{key}/en.mp3`. The learner's level per language is in
-`users/{uid}/prefs/study`.
+phrase doc lists the `episodeIds` that use it. The learner's level per language
+is in `users/{uid}/prefs/study`. English translation audio is generated on the
+device with Piper voices (`web/src/lib/piper`, `web/src/lib/tts`); voice models
+are downloaded once into Cache Storage.
 
 ## One-time setup
 
