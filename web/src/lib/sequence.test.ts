@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gapSeconds, nextAction, sourceRate, stepsAfterSource } from "./sequence";
+import { PAUSE_BEFORE_ENGLISH_SEC, gapSeconds, nextAction, sourceRate, stepsAfterSource } from "./sequence";
 import { DEFAULT_SETTINGS, type PracticeSettings } from "../types";
 
 const s = (patch: Partial<PracticeSettings>): PracticeSettings => ({ ...DEFAULT_SETTINGS, ...patch });
@@ -47,7 +47,8 @@ describe("gapSeconds with slow plays", () => {
 });
 
 describe("stepsAfterSource", () => {
-  const en = { kind: "clip", clip: "en" };
+  const pause = { kind: "pause", sec: PAUSE_BEFORE_ENGLISH_SEC };
+  const clip = { kind: "clip", clip: "en" };
   const gap = { kind: "gap" };
   it("has no steps in manual mode", () => {
     expect(stepsAfterSource(s({ mode: "manual" }), 1)).toEqual([]);
@@ -57,16 +58,16 @@ describe("stepsAfterSource", () => {
     expect(stepsAfterSource(s({ mode: "loop" }), 1)).toEqual([gap]);
   });
   it("plays English between the phrase and the gap", () => {
-    expect(stepsAfterSource(s({ mode: "auto", english: "each" }), 1)).toEqual([en, gap]);
-    expect(stepsAfterSource(s({ mode: "auto", english: "each" }), 3)).toEqual([en, gap]);
+    expect(stepsAfterSource(s({ mode: "auto", english: "each" }), 1)).toEqual([pause, clip, gap]);
+    expect(stepsAfterSource(s({ mode: "auto", english: "each" }), 3)).toEqual([pause, clip, gap]);
   });
   it("plays English only after the first play when set to first", () => {
-    expect(stepsAfterSource(s({ mode: "auto", english: "first" }), 1)).toEqual([en, gap]);
+    expect(stepsAfterSource(s({ mode: "auto", english: "first" }), 1)).toEqual([pause, clip, gap]);
     expect(stepsAfterSource(s({ mode: "auto", english: "first" }), 2)).toEqual([gap]);
     expect(stepsAfterSource(s({ mode: "loop", english: "first" }), 2)).toEqual([gap]);
   });
   it("plays English then stops in manual mode", () => {
-    expect(stepsAfterSource(s({ mode: "manual", english: "first" }), 1)).toEqual([en]);
+    expect(stepsAfterSource(s({ mode: "manual", english: "first" }), 1)).toEqual([pause, clip]);
   });
   it("treats settings saved before English existed as off", () => {
     const old = { ...DEFAULT_SETTINGS, mode: "auto" } as Partial<PracticeSettings>;

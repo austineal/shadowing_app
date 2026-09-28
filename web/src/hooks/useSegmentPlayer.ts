@@ -253,6 +253,10 @@ export function useSegmentPlayer(audioSrc: string | undefined, opts: Options) {
     }
     const advance = () => api.current.runFollow(steps, k + 1, done);
     const { settings, index: i, segments } = stateRef.current;
+    if (step.kind === "pause") {
+      cancelStepRef.current = schedule(graphRef.current, step.sec, advance);
+      return;
+    }
     if (step.kind === "gap") {
       setPhase("gap");
       const seg = segments[i];
