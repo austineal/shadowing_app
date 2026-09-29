@@ -153,6 +153,79 @@ export const DEFAULT_SETTINGS: PracticeSettings = {
   showTranslation: false,
 };
 
+/**
+ * An excerpt of an episode being drilled, at users/{uid}/drills/{id}. The learner works through
+ * its passages in order and reviews each on a spaced schedule.
+ */
+export interface Drill {
+  id: string;
+  episodeId: string;
+  /** Episode title when the excerpt was chosen, for lists that don't load the episode. */
+  episodeTitle: string;
+  /** Concrete language code (never "auto"). */
+  language: string;
+  /** Excerpt bounds, in seconds of episode audio. */
+  start: number;
+  end: number;
+  /** The excerpt cut into passages, in order. Each ends where the next begins. */
+  passages: DrillPassage[];
+  /** The passage being learned and how many of its phrases are done, so learning can resume next session. */
+  learning?: { passage: number; phrases: number } | null;
+  /** When the excerpt was chosen (ms since epoch). */
+  createdAt: number;
+}
+
+/**
+ * One passage of a drill excerpt. Passages are time ranges rather than phrase ids, so splitting,
+ * merging or rebuilding phrases never orphans them: a phrase belongs to the passage containing
+ * its midpoint.
+ */
+export interface DrillPassage {
+  start: number;
+  end: number;
+  /** Absent until learned. 0 = learned, due at the next session; each passed review moves it up. */
+  level?: number;
+  /** When the next review is due (ms since epoch). */
+  due?: number;
+  /** When it was last learned or reviewed (ms since epoch). */
+  last?: number;
+  reviews?: number;
+  lapses?: number;
+}
+
+/** How often a language's drill sessions come up. Stored per language in users/{uid}/prefs/drill. */
+export interface DrillSchedule {
+  /** Sessions a day, for languages drilled every day. */
+  perDay: number;
+  /** Days between sessions; 1 = every day. */
+  everyDays: number;
+  /** Planned length of a session. */
+  minutes: number;
+  /** Whether sessions start new passages once the due reviews are done. */
+  newMaterial: boolean;
+  /** full: three listen-and-repeat plays, the first two slowed. light: two plays at normal speed. */
+  learning: "full" | "light";
+  /** For languages drilled every few days: a day number (see dayNumber) the cycle counts from, so they can take turns. */
+  anchorDay?: number;
+}
+
+export interface DrillPrefs {
+  schedules: Record<string, DrillSchedule>;
+}
+
+/** One drill session, at users/{uid}/drillSessions/{id}. */
+export interface DrillSessionLog {
+  id: string;
+  language: string;
+  startedAt: number;
+  endedAt: number;
+  /** Passages reviewed or learned and phrases learned. A session with none doesn't count towards the schedule. */
+  progress: number;
+  reviewed: number;
+  passed: number;
+  learnedPhrases: number;
+}
+
 /** A word or spacing token with timestamps, as returned by speech-to-text or produced by alignment. */
 export interface TimedToken {
   text: string;

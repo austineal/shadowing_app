@@ -8,7 +8,7 @@ export interface SegmentOptions {
 }
 
 /** Sentence-final punctuation (Latin, CJK), optionally followed by closing quotes/brackets. */
-const SENTENCE_END = /[.!?。！？…]+["'”’»)\]]*$/u;
+export const SENTENCE_END = /[.!?。！？…]+["'”’»)\]]*$/u;
 /** Clause punctuation: good secondary split points. */
 const CLAUSE_END = /[,;:、，；：—–]+["'”’»)\]]*$/u;
 
