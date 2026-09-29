@@ -195,3 +195,43 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 .bubble.user { align-self: flex-end; background: var(--accent); color: var(--accent-ink); }
 .bubble.assistant { align-self: flex-start; background: var(--bg-elev2); }
 .seg .note-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-left: 6px; vertical-align: middle; opacity: 0.8; }
+
+/* Drill */
+.seg.in-drill { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 55%, transparent); }
+.seg.picked { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--text); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.picker { display: flex; flex-direction: column; gap: 8px; }
+.picker select.input { margin-left: 6px; }
+
+.drill-intro { padding: 12px 14px 0; }
+.drill-today { margin: 12px 14px 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-elev); display: flex; flex-direction: column; gap: 6px; }
+.drill-today h2 { font-size: 1rem; }
+.drill-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--border); }
+.drill-row .body { flex: 1; min-width: 0; }
+.drill-row .title { font-weight: 600; }
+.drill-row .meta { color: var(--text-dim); font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drill-row .next { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; }
+
+.lang-card .body { display: flex; flex-direction: column; gap: 8px; }
+.lang-card .title { font-weight: 650; font-size: 1.02rem; }
+.lang-fields { display: flex; flex-direction: column; gap: 8px; }
+.field-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 0.9rem; }
+.field-row select.input { width: auto; max-width: 62%; padding: 4px 8px; min-height: 32px; }
+.excerpts { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--border); padding-top: 8px; }
+.excerpt-row { display: flex; align-items: center; gap: 8px; }
+.excerpt-row .body { flex: 1; min-width: 0; gap: 0; }
+
+.drill { display: flex; flex-direction: column; flex: none; min-height: 100dvh; }
+.drill-ready { display: flex; flex-direction: column; gap: 12px; }
+.drill-plan { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+.drill-notice { border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); border-radius: 10px; padding: 10px 12px; line-height: 1.6; }
+.drill-start { align-self: center; min-width: 180px; min-height: 52px; font-size: 1.1rem; margin-top: 6px; }
+.drill-stage { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 14px; padding: 24px 18px; text-align: center; }
+.drill-cue { font-size: 1.35rem; font-weight: 650; }
+.drill-cue.cue-english { color: var(--accent); }
+.drill-cue.cue-speak { color: var(--warn); }
+.drill-cue.cue-answer { color: var(--ok); }
+.drill-english { color: var(--text-dim); font-size: 1.1rem; min-height: 1.5em; }
+.drill-text { font-size: 1.35rem; line-height: 1.5; min-height: 3em; }
+.drill-missed { min-width: 120px; }
+.drill-done { flex: 1; }
+.drill-done h2 { font-size: 1.3rem; }

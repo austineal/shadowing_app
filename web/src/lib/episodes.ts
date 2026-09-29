@@ -260,6 +260,11 @@ export async function getEpisodeOnce(uid: string, episodeId: string): Promise<Ep
   return snap.exists() ? toEpisode({ id: snap.id, data: () => snap.data() }) : null;
 }
 
+export async function getSegmentsOnce(uid: string, episodeId: string): Promise<SegmentsDoc | null> {
+  const snap = await getDoc(segmentsDoc(uid, episodeId));
+  return snap.exists() ? (snap.data() as SegmentsDoc) : null;
+}
+
 // ---- Cloud Functions ----
 
 export interface FeedEpisode {

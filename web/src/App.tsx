@@ -5,6 +5,8 @@ import Library from "./pages/Library";
 import Import from "./pages/Import";
 import Practice from "./pages/Practice";
 import Podcast from "./pages/Podcast";
+import DrillSession from "./pages/DrillSession";
+import DrillSettings from "./pages/DrillSettings";
 
 export default function App() {
   const user = useAuth();
@@ -24,6 +26,8 @@ export default function App() {
         <Route path="/import" element={<Import uid={uid} />} />
         <Route path="/episode/:id" element={<Practice uid={uid} />} />
         <Route path="/podcast/:id" element={<Podcast uid={uid} />} />
+        <Route path="/drill/settings" element={<DrillSettings uid={uid} />} />
+        <Route path="/drill/:language" element={<DrillSession uid={uid} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>
