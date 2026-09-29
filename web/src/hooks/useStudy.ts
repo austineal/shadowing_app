@@ -1,28 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { phraseKey, subscribeEpisodePhrases } from "../lib/study";
+import { isVoiceStored, synthesize } from "../lib/tts/client";
 import type { ClipKind } from "../lib/sequence";
 import type { Episode, PhraseStudy, Segment } from "../types";
 
-/** How many phrases ahead of the current one to download English audio for. */
+/** How many phrases ahead of the current one to prepare English audio for. */
 const PREFETCH_AHEAD = 3;
-
-function englishUrl(p: PhraseStudy | undefined): string | undefined {
-  return p?.enAudioUrl && p.enAudioText === p.translation ? p.enAudioUrl : undefined;
-}
-
-async function decodeClip(url: string): Promise<AudioBuffer> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Clip download failed (${res.status}).`);
-  const data = await res.arrayBuffer();
-  // AudioBuffers aren't tied to the context that decoded them, so the player's graph can play these.
-  return new OfflineAudioContext(1, 1, 44100).decodeAudioData(data);
-}
+/** Generated clips kept in memory. */
+const MAX_CLIPS = 60;
 
 /**
- * Study material for the episode's phrases, plus decoded English clips for the player.
- * `language` must be a concrete code (not "auto").
+ * Study material for the episode's phrases, plus English translation clips generated on this
+ * device with `voiceId` (once that voice has been downloaded). `language` must be a concrete code.
  */
-export function useStudy(uid: string, episode: Episode, segments: Segment[], language: string) {
+export function useStudy(uid: string, episode: Episode, segments: Segment[], language: string, voiceId: string) {
   const enabled = !!episode.study?.enabled && language !== "auto";
 
   /** Phrase key for each segment index. */
@@ -51,45 +42,65 @@ export function useStudy(uid: string, episode: Episode, segments: Segment[], lan
     const unique = new Set(keys);
     const level = episode.study?.level;
     let done = 0;
-    let voiced = 0;
-    let chars = 0;
-    for (const k of unique) {
-      const p = phrases.get(k);
-      if (!p || p.level !== level) continue;
-      done++;
-      chars += p.translation.length;
-      if (englishUrl(p)) voiced++;
-    }
-    return { total: unique.size, done, voiced, chars };
+    for (const k of unique) if (phrases.get(k)?.level === level) done++;
+    return { total: unique.size, done };
   }, [keys, phrases, episode.study?.level]);
 
-  // Decoded clips by URL. Refs, so the player's getClip (called from audio callbacks) sees the latest.
-  const clips = useRef(new Map<string, AudioBuffer>());
-  const loading = useRef(new Set<string>());
-  const phraseAtRef = useRef(phraseAt);
+  /** Whether the English voice's model is on this device. */
+  const [voiceReady, setVoiceReady] = useState(false);
+  const [voiceCheck, setVoiceCheck] = useState(0);
   useEffect(() => {
-    phraseAtRef.current = phraseAt;
-  }, [phraseAt]);
+    let cancelled = false;
+    void isVoiceStored(voiceId).then((ok) => !cancelled && setVoiceReady(ok));
+    return () => {
+      cancelled = true;
+    };
+  }, [voiceId, voiceCheck]);
+  const refreshVoice = useCallback(() => setVoiceCheck((n) => n + 1), []);
 
-  const prefetch = useCallback((index: number) => {
-    for (let i = index; i <= index + PREFETCH_AHEAD; i++) {
-      const url = englishUrl(phraseAtRef.current(i));
-      if (!url || clips.current.has(url) || loading.current.has(url)) continue;
-      loading.current.add(url);
-      decodeClip(url)
-        .then((buf) => clips.current.set(url, buf))
-        .catch(() => undefined) // missing clip is skipped at play time
-        .finally(() => loading.current.delete(url));
-    }
+  // Clips by voice + text, finished or in progress. Refs, so the player's getClip (called from
+  // audio callbacks) always sees the latest.
+  const clips = useRef(new Map<string, AudioBuffer | Promise<AudioBuffer | undefined>>());
+  const latest = useRef({ phraseAt, voiceId, voiceReady });
+  useEffect(() => {
+    latest.current = { phraseAt, voiceId, voiceReady };
+  }, [phraseAt, voiceId, voiceReady]);
+
+  const englishClip = useCallback((index: number): AudioBuffer | Promise<AudioBuffer | undefined> | undefined => {
+    const { phraseAt: at, voiceId: voice, voiceReady: ready } = latest.current;
+    const text = at(index)?.translation;
+    if (!ready || !text) return undefined;
+    const key = `${voice}\n${text}`;
+    const have = clips.current.get(key);
+    if (have) return have;
+    const job = synthesize(voice, text).then(
+      (buf) => {
+        clips.current.set(key, buf);
+        return buf;
+      },
+      () => {
+        clips.current.delete(key); // try again next time
+        return undefined;
+      },
+    );
+    clips.current.set(key, job);
+    while (clips.current.size > MAX_CLIPS) clips.current.delete(clips.current.keys().next().value!);
+    return job;
   }, []);
 
-  const getClip = useCallback((index: number, clip: ClipKind): AudioBuffer | undefined => {
-    if (clip !== "en") return undefined;
-    const url = englishUrl(phraseAtRef.current(index));
-    return url ? clips.current.get(url) : undefined;
-  }, []);
+  const prefetch = useCallback(
+    (index: number) => {
+      for (let i = index; i <= index + PREFETCH_AHEAD; i++) void englishClip(i);
+    },
+    [englishClip],
+  );
 
-  return { enabled, phraseAt, progress, prefetch, getClip };
+  const getClip = useCallback(
+    (index: number, clip: ClipKind) => (clip === "en" ? englishClip(index) : undefined),
+    [englishClip],
+  );
+
+  return { enabled, phraseAt, progress, prefetch, getClip, voiceReady, refreshVoice };
 }
 
 export type Study = ReturnType<typeof useStudy>;

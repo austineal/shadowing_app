@@ -42,14 +42,15 @@ export default defineConfig({
             },
           },
           {
-            // Study-mode clips (voiced translations). Each URL carries its own download token and
-            // a regenerated clip gets a new one, so a cached copy never goes stale.
-            urlPattern: /^https:\/\/firebasestorage\.googleapis\.com\/v0\/b\/[^/]+\/o\/.*%2Fphrases%2F[^?]+\.mp3\?alt=media/,
+            // On-device TTS runtime (onnxruntime-web and the Piper phonemiser with its espeak-ng
+            // data), loaded from the CDN by the TTS worker. Versioned URLs, so cache-first is safe
+            // and makes English audio work offline after first use. Voice models are cached by the
+            // app itself (lib/piper/runner.ts).
+            urlPattern: /^https:\/\/cdn\.jsdelivr\.net\/npm\/(onnxruntime-web@|@diffusionstudio\/piper-wasm@)/,
             handler: "CacheFirst",
             options: {
-              cacheName: "study-audio",
+              cacheName: "tts-runtime",
               cacheableResponse: { statuses: [200] },
-              expiration: { maxEntries: 5000 },
             },
           },
           {

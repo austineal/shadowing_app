@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { gapSeconds, nextAction, stepsAfterSource, type ClipKind, type FollowStep } from "../lib/sequence";
+import { gapSeconds, nextAction, sourceRate, stepsAfterSource, type ClipKind, type FollowStep } from "../lib/sequence";
 import type { PracticeSettings, Segment } from "../types";
 
 /** playing: source audio. clip: an extra clip (translation etc.). gap: silence for the user to speak. */
@@ -9,9 +9,15 @@ interface Options {
   segments: Segment[];
   settings: PracticeSettings;
   title?: string;
-  /** Decoded extra audio for a phrase, if already loaded. Missing clips are skipped. */
-  getClip?: (index: number, clip: ClipKind) => AudioBuffer | undefined;
+  /**
+   * Extra audio for a phrase: the clip, a promise of one still being prepared (waited for up to
+   * CLIP_WAIT_SEC), or undefined to skip it.
+   */
+  getClip?: (index: number, clip: ClipKind) => AudioBuffer | Promise<AudioBuffer | undefined> | undefined;
 }
+
+/** How long a clip that is still being generated may hold up playback before it's skipped. */
+const CLIP_WAIT_SEC = 8;
 
 /**
  * Background-playback graph.
@@ -167,8 +173,8 @@ export function useSegmentPlayer(audioSrc: string | undefined, opts: Options) {
 
   // Live playback-rate changes.
   useEffect(() => {
-    if (audioRef.current) audioRef.current.playbackRate = opts.settings.rate;
-  }, [opts.settings.rate]);
+    if (audioRef.current) audioRef.current.playbackRate = sourceRate(stateRef.current.settings, playsRef.current + 1);
+  }, [opts.settings.rate, opts.settings.slowPlays, opts.settings.slowRate, opts.settings.mode]);
 
   /** Connects the element to the graph and starts the continuous output stream. */
   const startGraph = useCallback(async (a: HTMLAudioElement) => {
@@ -247,38 +253,68 @@ export function useSegmentPlayer(audioSrc: string | undefined, opts: Options) {
     }
     const advance = () => api.current.runFollow(steps, k + 1, done);
     const { settings, index: i, segments } = stateRef.current;
+    if (step.kind === "pause") {
+      cancelStepRef.current = schedule(graphRef.current, step.sec, advance);
+      return;
+    }
     if (step.kind === "gap") {
       setPhase("gap");
       const seg = segments[i];
-      cancelStepRef.current = schedule(graphRef.current, seg ? gapSeconds(seg, settings) : 0.4, advance);
+      cancelStepRef.current = schedule(graphRef.current, seg ? gapSeconds(seg, settings, done) : 0.4, advance);
       return;
     }
     // Clips play through the same graph so the background keep-alive stream carries them,
     // and their end fires on the audio clock like the gap timers.
     const g = graphRef.current;
-    const buffer = stateRef.current.getClip?.(i, step.clip);
-    if (!g || !buffer || g.ctx.state !== "running") {
+    const clip = stateRef.current.getClip?.(i, step.clip);
+    if (!g || !clip || g.ctx.state !== "running") {
       advance();
       return;
     }
     setPhase("clip");
-    const node = g.ctx.createBufferSource();
-    node.buffer = buffer;
-    node.connect(g.direct ? g.ctx.destination : g.dest);
-    node.onended = () => {
-      node.disconnect();
+    const playBuffer = (buffer: AudioBuffer) => {
+      const node = g.ctx.createBufferSource();
+      node.buffer = buffer;
+      node.connect(g.direct ? g.ctx.destination : g.dest);
+      node.onended = () => {
+        node.disconnect();
+        advance();
+      };
+      node.start();
+      cancelStepRef.current = () => {
+        node.onended = null;
+        try {
+          node.stop();
+        } catch {
+          /* already stopped */
+        }
+        node.disconnect();
+      };
+    };
+    if (clip instanceof AudioBuffer) {
+      playBuffer(clip);
+      return;
+    }
+    // Still being generated. The keep-alive stream keeps the page running while we wait, and the
+    // timeout runs on the audio clock so it still fires with the screen off.
+    let settled = false;
+    const cancelTimeout = schedule(g, CLIP_WAIT_SEC, () => {
+      if (settled) return;
+      settled = true;
       advance();
-    };
-    node.start();
+    });
     cancelStepRef.current = () => {
-      node.onended = null;
-      try {
-        node.stop();
-      } catch {
-        /* already stopped */
-      }
-      node.disconnect();
+      settled = true;
+      cancelTimeout();
     };
+    const finish = (buffer: AudioBuffer | undefined) => {
+      if (settled) return;
+      settled = true;
+      cancelTimeout();
+      if (buffer) playBuffer(buffer);
+      else advance();
+    };
+    clip.then(finish, () => finish(undefined));
   };
 
   api.current.afterPlay = (done) => {
@@ -307,7 +343,7 @@ export function useSegmentPlayer(audioSrc: string | undefined, opts: Options) {
     const pad = settings.paddingMs / 1000;
     const start = Math.max(0, seg.start - pad);
     const end = seg.end + pad;
-    a.playbackRate = settings.rate;
+    a.playbackRate = sourceRate(settings, playsRef.current + 1);
 
     const begin = async () => {
       try {

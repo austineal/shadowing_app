@@ -57,33 +57,3 @@ export async function transcribeAudio(opts: TranscribeOptions): Promise<ScribeRe
   return json;
 }
 
-export interface SpeechOptions {
-  apiKey: string;
-  voiceId: string;
-  modelId: string;
-  text: string;
-  /** ISO-639-1 code; helps the model pick pronunciation. */
-  languageCode?: string;
-  /** 0.7–1.2; 1 is normal speed. */
-  speed?: number;
-}
-
-/** Text-to-speech. Returns MP3 bytes. */
-export async function synthesizeSpeech(opts: SpeechOptions): Promise<Buffer> {
-  const url = `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(opts.voiceId)}?output_format=mp3_44100_128`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "xi-api-key": opts.apiKey, "content-type": "application/json", accept: "audio/mpeg" },
-    body: JSON.stringify({
-      text: opts.text,
-      model_id: opts.modelId,
-      ...(opts.languageCode ? { language_code: opts.languageCode } : {}),
-      ...(opts.speed !== undefined ? { voice_settings: { speed: opts.speed } } : {}),
-    }),
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`ElevenLabs text-to-speech failed (${res.status}): ${body.slice(0, 500)}`);
-  }
-  return Buffer.from(await res.arrayBuffer());
-}

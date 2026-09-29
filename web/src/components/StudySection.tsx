@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { disableStudy, prepareStudy, setStudyLevel, subscribeStudyLevels } from "../lib/study";
+import { ENGLISH_VOICES, loadVoice, synthesize } from "../lib/tts/client";
 import { languageLabel } from "../lib/languages";
 import type { Study } from "../hooks/useStudy";
 import { CEFR_LEVELS, type CefrLevel, type Episode, type PracticeSettings } from "../types";
@@ -25,24 +26,18 @@ export function StudySection(props: {
 
   const level = levels[language];
   const st = episode.study;
-  const { total, done, voiced, chars } = study.progress;
+  const { total, done } = study.progress;
 
-  const run = async (english?: boolean, retry = false) => {
+  const run = async (retry = false) => {
     setBusy(true);
     setError(undefined);
     try {
-      await prepareStudy(episode.id, language, english, retry);
+      await prepareStudy(episode.id, language, retry);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
-  };
-
-  const requestEnglish = () => {
-    const estimate = chars > 0 && done === total ? `about ${chars.toLocaleString()} characters` : "one clip per phrase";
-    if (!confirm(`Generate English audio for this episode? This uses ElevenLabs text-to-speech (${estimate}).`)) return;
-    void run(true);
   };
 
   return (
@@ -94,7 +89,7 @@ export function StudySection(props: {
           {st.error && done < total && (
             <p className="small error" style={{ marginTop: 6 }}>
               {st.error}{" "}
-              <button className="btn small" disabled={busy} onClick={() => void run(undefined, true)}>
+              <button className="btn small" disabled={busy} onClick={() => void run(true)}>
                 Retry
               </button>
             </p>
@@ -109,47 +104,7 @@ export function StudySection(props: {
             Show the translation under the current phrase
           </label>
 
-          <div style={{ marginTop: 12 }}>
-            {!st.english ? (
-              <>
-                <button className="btn small" disabled={busy} onClick={requestEnglish}>
-                  Generate English audio
-                </button>
-                <p className="small muted" style={{ marginTop: 6 }}>
-                  Voices each translation so it can play after the phrase. Off by default because it uses text-to-speech
-                  credits.
-                </p>
-              </>
-            ) : (
-              <>
-                <div className="row" style={{ justifyContent: "space-between" }}>
-                  <span className="small">
-                    English audio:{" "}
-                    {total > 0 && voiced >= total ? <span className="pill ready">ready</span> : `${voiced} / ${total}`}
-                  </span>
-                  <select
-                    className="input"
-                    style={{ width: "auto", padding: "4px 8px", minHeight: 32 }}
-                    value={settings.english ?? "off"}
-                    onChange={(e) => props.onChange({ english: e.target.value as PracticeSettings["english"] })}
-                    aria-label="When to play English"
-                  >
-                    <option value="off">Don't play</option>
-                    <option value="first">After first play</option>
-                    <option value="each">After every play</option>
-                  </select>
-                </div>
-                {st.audioError && voiced < total && (
-                  <p className="small error" style={{ marginTop: 6 }}>
-                    {st.audioError}{" "}
-                    <button className="btn small" disabled={busy} onClick={() => void run(true, true)}>
-                      Retry
-                    </button>
-                  </p>
-                )}
-              </>
-            )}
-          </div>
+          <EnglishAudio study={study} settings={settings} onChange={props.onChange} />
         </>
       )}
       {error && (
@@ -157,6 +112,91 @@ export function StudySection(props: {
           {error}
         </p>
       )}
+    </div>
+  );
+}
+
+/** English translation audio, generated on this device. */
+function EnglishAudio(props: { study: Study; settings: PracticeSettings; onChange: (patch: Partial<PracticeSettings>) => void }) {
+  const { study, settings } = props;
+  const voiceId = settings.englishVoice ?? ENGLISH_VOICES[0].id;
+  const [download, setDownload] = useState<{ loaded: number; total: number }>();
+  const [error, setError] = useState<string>();
+
+  const fetchVoice = async () => {
+    setError(undefined);
+    setDownload({ loaded: 0, total: 0 });
+    try {
+      await loadVoice(voiceId, (loaded, total) => setDownload({ loaded, total }));
+      study.refreshVoice();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDownload(undefined);
+    }
+  };
+
+  const sample = async () => {
+    const buf = await synthesize(voiceId, "This is how the English translations will sound.");
+    const ctx = new AudioContext();
+    const node = ctx.createBufferSource();
+    node.buffer = buf;
+    node.connect(ctx.destination);
+    node.onended = () => void ctx.close();
+    node.start();
+  };
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div className="row" style={{ justifyContent: "space-between" }}>
+        <span className="small">English voice</span>
+        <select
+          className="input"
+          style={{ width: "auto", padding: "4px 8px", minHeight: 32 }}
+          value={voiceId}
+          onChange={(e) => props.onChange({ englishVoice: e.target.value })}
+          aria-label="English voice"
+        >
+          {ENGLISH_VOICES.map((v) => (
+            <option key={v.id} value={v.id}>
+              {v.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      {!study.voiceReady ? (
+        <>
+          <button className="btn small" style={{ marginTop: 8 }} disabled={!!download} onClick={() => void fetchVoice()}>
+            {download
+              ? download.total
+                ? `Downloading ${Math.round((download.loaded / download.total) * 100)}%…`
+                : "Downloading…"
+              : "Download voice (about 60 MB)"}
+          </button>
+          <p className="small muted" style={{ marginTop: 6 }}>
+            The translations are read aloud on this device, so the voice is downloaded once and then works offline. Keep
+            the screen on while it downloads.
+          </p>
+        </>
+      ) : (
+        <div className="row" style={{ justifyContent: "space-between", marginTop: 8 }}>
+          <button className="btn small" onClick={() => void sample().catch((e) => setError(String(e)))}>
+            ▶ Try voice
+          </button>
+          <select
+            className="input"
+            style={{ width: "auto", padding: "4px 8px", minHeight: 32 }}
+            value={settings.english ?? "off"}
+            onChange={(e) => props.onChange({ english: e.target.value as PracticeSettings["english"] })}
+            aria-label="When to play English"
+          >
+            <option value="off">Don't play English</option>
+            <option value="first">English after first play</option>
+            <option value="each">English after every play</option>
+          </select>
+        </div>
+      )}
+      {error && <p className="small error" style={{ marginTop: 6 }}>{error}</p>}
     </div>
   );
 }
