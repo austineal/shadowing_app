@@ -8,6 +8,7 @@ import type { TtsRequest, TtsResponse } from "./worker";
 /** Voices offered for English. Medium quality: fast enough on a phone (~0.4x real time). */
 export const ENGLISH_VOICES = [
   { id: "en_GB-alba-medium", label: "Alba (British, female)" },
+  { id: "en_GB-cori-medium", label: "Cori (British, female)" },
   { id: "en_US-lessac-medium", label: "Lessac (American, female)" },
   { id: "en_GB-northern_english_male-medium", label: "Northern English (male)" },
   { id: "en_US-ryan-medium", label: "Ryan (American, male)" },
