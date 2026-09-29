@@ -1,7 +1,7 @@
 import type { PracticeSettings, Segment } from "../types";
 
-/** Extra audio that can follow a phrase (English translation, slow re-reading). */
-export type ClipKind = "en" | "slow";
+/** Extra audio that can follow a phrase: currently only its English translation. */
+export type ClipKind = "en";
 
 /** What happens after the phrase's source audio finishes, before the next play is decided. */
 export type FollowStep = { kind: "pause"; sec: number } | { kind: "clip"; clip: ClipKind } | { kind: "gap" };
