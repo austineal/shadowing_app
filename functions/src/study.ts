@@ -87,7 +87,7 @@ function isDone(data: FirebaseFirestore.DocumentData | undefined, level: CefrLev
   return !!data && data.level === level && typeof data.translation === "string";
 }
 
-function languageName(code: string): string {
+export function languageName(code: string): string {
   try {
     return new Intl.DisplayNames(["en"], { type: "language" }).of(code) ?? code;
   } catch {
