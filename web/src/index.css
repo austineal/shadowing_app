@@ -235,3 +235,11 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 .drill-missed { min-width: 120px; }
 .drill-done { flex: 1; }
 .drill-done h2 { font-size: 1.3rem; }
+.picker-title { font-weight: 650; }
+.drill-passage-title { color: var(--text); font-size: 1rem; font-weight: 600; margin-top: 4px; }
+.suggestions { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.suggestion { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.suggestion.next { border-color: var(--ok); }
+.suggestion.skip { opacity: 0.55; }
+.suggestion-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.suggestion-head .title { font-weight: 600; }

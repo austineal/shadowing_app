@@ -194,8 +194,9 @@ function ExcerptRow({ uid, drill }: { uid: string; drill: Drill }) {
   return (
     <div className="excerpt-row">
       <div className="body">
-        <Link to={`/episode/${drill.episodeId}`}>{drill.episodeTitle}</Link>
+        <Link to={`/episode/${drill.episodeId}`}>{drill.title ?? drill.episodeTitle}</Link>
         <div className="small muted">
+          {drill.title ? `${drill.episodeTitle} · ` : ""}
           {formatTime(drill.start)}–{formatTime(drill.end)} · {learned} of {drill.passages.length} passages learned
           {due > 0 ? ` · ${due} due` : ""}
           {frontier(drill) < 0 ? " · finished" : ""}

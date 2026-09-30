@@ -23,6 +23,8 @@ interface BlockBase {
   episodeId: string;
   /** What the screen calls the excerpt. */
   title: string;
+  /** The passage's own title, when Claude planned the passages. */
+  passageTitle?: string;
   /** Index of the passage in the drill, and how many passages the drill has. */
   passage: number;
   passageCount: number;

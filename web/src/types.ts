@@ -162,6 +162,8 @@ export interface Drill {
   episodeId: string;
   /** Episode title when the excerpt was chosen, for lists that don't load the episode. */
   episodeTitle: string;
+  /** Short title from Claude: the suggested section's, or given when its passages were planned. */
+  title?: string;
   /** Concrete language code (never "auto"). */
   language: string;
   /** Excerpt bounds, in seconds of episode audio. */
@@ -183,6 +185,8 @@ export interface Drill {
 export interface DrillPassage {
   start: number;
   end: number;
+  /** Short title from Claude, when the passages were planned by it. */
+  title?: string;
   /** Absent until learned. 0 = learned, due at the next session; each passed review moves it up. */
   level?: number;
   /** When the next review is due (ms since epoch). */
@@ -224,6 +228,31 @@ export interface DrillSessionLog {
   reviewed: number;
   passed: number;
   learnedPhrases: number;
+  /** Audio in the passages fully learned, in seconds. Absent from logs made before it was recorded. */
+  learnedSeconds?: number;
+}
+
+/** A section of an episode suggested as a drill excerpt. */
+export interface ExcerptSection {
+  start: number;
+  end: number;
+  title: string;
+  summary: string;
+  /** good: natural speech worth being able to say. fair: usable but less so. skip: not worth drilling. */
+  speaking: "good" | "fair" | "skip";
+  why: string;
+  /** CEFR level needed to follow it comfortably. */
+  level: CefrLevel;
+}
+
+/** Claude's excerpt suggestions for an episode, at users/{uid}/episodes/{id}/data/excerpts. */
+export interface ExcerptSuggestions {
+  language: string;
+  /** The learner's level and the section length the suggestions were made for. */
+  level: CefrLevel;
+  minutes: number;
+  sections: ExcerptSection[];
+  createdAt: Timestamp | null;
 }
 
 /** A word or spacing token with timestamps, as returned by speech-to-text or produced by alignment. */

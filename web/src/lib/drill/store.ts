@@ -26,7 +26,7 @@ import {
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../../firebase";
 import { normalizePhrase, phraseKey } from "../study";
-import type { Drill, DrillPassage, DrillPrefs, DrillSchedule, DrillSessionLog } from "../../types";
+import type { Drill, DrillPassage, DrillPrefs, DrillSchedule, DrillSessionLog, ExcerptSuggestions } from "../../types";
 
 const drillsCollection = (uid: string) => collection(db, "users", uid, "drills");
 const drillDoc = (uid: string, id: string) => doc(db, "users", uid, "drills", id);
@@ -38,6 +38,7 @@ const toDrill = (d: QueryDocumentSnapshot<DocumentData>): Drill => ({ id: d.id, 
 /** Firestore rejects undefined fields. */
 function cleanPassage(p: DrillPassage): DrillPassage {
   const out: DrillPassage = { start: p.start, end: p.end };
+  if (p.title) out.title = p.title;
   for (const k of ["level", "due", "last", "reviews", "lapses"] as const) if (p[k] !== undefined) out[k] = p[k];
   return out;
 }
@@ -52,8 +53,10 @@ export async function getDrills(uid: string, language: string): Promise<Drill[]>
 }
 
 export async function createDrill(uid: string, drill: Omit<Drill, "id" | "createdAt">): Promise<string> {
+  const { title, ...rest } = drill;
   const ref = await addDoc(drillsCollection(uid), {
-    ...drill,
+    ...rest,
+    ...(title ? { title } : {}),
     passages: drill.passages.map(cleanPassage),
     learning: drill.learning ?? null,
     createdAt: Date.now(),
@@ -102,9 +105,16 @@ export function subscribeRecentSessions(uid: string, since: number, cb: (logs: D
 /** Records the start of a session; returns its id for updateSessionLog. */
 export function startSessionLog(uid: string, language: string, now: number): string {
   const ref = doc(sessionsCollection(uid));
-  void setDoc(ref, { language, startedAt: now, endedAt: now, progress: 0, reviewed: 0, passed: 0, learnedPhrases: 0 }).catch(
-    () => undefined,
-  );
+  void setDoc(ref, {
+    language,
+    startedAt: now,
+    endedAt: now,
+    progress: 0,
+    reviewed: 0,
+    passed: 0,
+    learnedPhrases: 0,
+    learnedSeconds: 0,
+  }).catch(() => undefined);
   return ref.id;
 }
 
@@ -112,7 +122,7 @@ export function updateSessionLog(
   uid: string,
   id: string,
   endedAt: number,
-  add: Partial<Pick<DrillSessionLog, "progress" | "reviewed" | "passed" | "learnedPhrases">> = {},
+  add: Partial<Pick<DrillSessionLog, "progress" | "reviewed" | "passed" | "learnedPhrases" | "learnedSeconds">> = {},
 ): void {
   const patch: Record<string, unknown> = { endedAt };
   for (const [k, v] of Object.entries(add)) if (v) patch[k] = increment(v);
@@ -150,4 +160,46 @@ const prepareDrillStudyFn = httpsCallable<
  */
 export async function prepareDrillStudy(params: { episodeId: string; language: string; start: number; end: number; retry?: boolean }) {
   return (await prepareDrillStudyFn(params)).data;
+}
+
+const suggestionsDoc = (uid: string, episodeId: string) => doc(db, "users", uid, "episodes", episodeId, "data", "excerpts");
+
+/** Claude's excerpt suggestions for an episode, live; null when there are none yet. */
+export function subscribeExcerptSuggestions(
+  uid: string,
+  episodeId: string,
+  cb: (s: ExcerptSuggestions | null) => void,
+  onError?: (e: Error) => void,
+): Unsubscribe {
+  return onSnapshot(suggestionsDoc(uid, episodeId), (snap) => cb(snap.exists() ? (snap.data() as ExcerptSuggestions) : null), onError);
+}
+
+const suggestExcerptsFn = httpsCallable<{ episodeId: string; language: string; minutes: number }, { sections: number }>(
+  functions,
+  "suggestExcerpts",
+  { timeout: 540_000 },
+);
+
+/**
+ * Has Claude split the episode into self-contained sections of about `minutes` each, rated for
+ * speaking practice. The result is saved with the episode (see subscribeExcerptSuggestions), so
+ * it arrives even if this call's connection drops. Takes a minute or two for a long episode.
+ */
+export async function suggestExcerpts(params: { episodeId: string; language: string; minutes: number }) {
+  return (await suggestExcerptsFn(params)).data;
+}
+
+const planDrillPassagesFn = httpsCallable<{ drillId: string }, { title: string; passages: number; applied: boolean }>(
+  functions,
+  "planDrillPassages",
+  { timeout: 180_000 },
+);
+
+/**
+ * Has Claude split a new excerpt into passages at natural break points, with titles, and title the
+ * excerpt. The drill document is updated on the server; its passages are only replaced while it
+ * has no progress.
+ */
+export async function planDrillPassages(drillId: string) {
+  return (await planDrillPassagesFn({ drillId })).data;
 }

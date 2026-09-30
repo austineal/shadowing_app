@@ -122,9 +122,15 @@ original, then hear it as the answer. Passive listening and study mode are
 unaffected.
 
 - **Choosing an excerpt.** Tap **Drill** on an episode, then tap the excerpt's first
-  and last phrases. It is cut into passages of about 40 seconds, breaking at pauses
-  and sentence ends. Choosing one queues translations for just that stretch
-  (`prepareDrillStudy`), without turning study mode on for the whole episode.
+  and last phrases, or tap **Suggest excerpts**: Claude (`suggestExcerpts`) splits the
+  episode into self-contained sections rated for speaking practice, each about two
+  weeks of new material long at that language's pace. The pace is estimated from the
+  schedule until there are two weeks of sessions, then measured from them. Choosing an
+  excerpt queues translations for just that stretch (`prepareDrillStudy`), without
+  turning study mode on for the whole episode, and has Claude (`planDrillPassages`)
+  split it into titled passages of about 40 seconds at natural breaks. Until that
+  arrives, passages are cut at pauses and sentence ends. When every excerpt in a
+  language is learned, the library links to the next suggestion in the same episode.
 - **Sessions.** Each language has its own schedule (**Drill schedules** in the
   library): how often it comes up (up to three times a day, down to weekly), how long
   a session is, whether it learns new material, and a full or light learning drill.
@@ -148,7 +154,9 @@ unaffected.
 Data: `users/{uid}/drills/{id}` holds an excerpt and its passages (time ranges, so
 phrase edits don't orphan them, with each passage's level and due date);
 `users/{uid}/prefs/drill` the schedules; `users/{uid}/drillSessions/{id}` a log of
-sessions, which the schedules count only once a session has finished something.
+sessions, which the schedules count only once a session has finished something, and
+which record the audio learned for measuring pace. An episode's suggested excerpts
+are at `users/{uid}/episodes/{id}/data/excerpts`.
 
 ## Development
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useEpisode, useSegmentsDoc } from "../hooks/useEpisode";
-import { useDrills } from "../hooks/useDrills";
+import { useDrills, useExcerptSuggestions } from "../hooks/useDrills";
 import { useSegmentPlayer } from "../hooks/useSegmentPlayer";
 import { useStudy, type Study } from "../hooks/useStudy";
 import { alignTranscript } from "../lib/align";
@@ -25,6 +25,7 @@ import { sourceRate } from "../lib/sequence";
 import { loadDefaultSettings, saveDefaultSettings } from "../lib/settings";
 import { useOnline } from "../lib/offline";
 import { ExcerptPicker } from "../components/ExcerptPicker";
+import { ExcerptSuggestionsSheet } from "../components/ExcerptSuggestions";
 import { OfflineButton } from "../components/OfflineButton";
 import { StudySection } from "../components/StudySection";
 import { PhraseStudySheet } from "../components/PhraseStudySheet";
@@ -193,7 +194,12 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
   const [studyIndex, setStudyIndex] = useState<number>();
   const [editing, setEditing] = useState(false);
   /** Choosing an excerpt to drill: the first and last phrases tapped so far. */
-  const [picking, setPicking] = useState<{ first?: number; last?: number } | null>(null);
+  // ?drill=suggest (from the library's drill list) opens the picker with Claude's suggestions showing.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [picking, setPicking] = useState<{ first?: number; last?: number; title?: string } | null>(() =>
+    searchParams.get("drill") && language !== "auto" ? {} : null,
+  );
+  const [suggesting, setSuggesting] = useState(() => searchParams.get("drill") === "suggest" && language !== "auto");
   const [tokens, setTokens] = useState<TimedToken[] | null>(null);
   const [busy, setBusy] = useState<string>();
   const [notice, setNotice] = useState<string>();
@@ -222,6 +228,7 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
   const player = useSegmentPlayer(src, { segments, settings, title: episode.title, getClip: study.getClip });
   const allDrills = useDrills(uid);
   const episodeDrills = useMemo(() => (allDrills ?? []).filter((d) => d.episodeId === episode.id), [allDrills, episode.id]);
+  const suggestions = useExcerptSuggestions(uid, episode.id);
 
   // Download English clips for the next few phrases so they're decoded before they're due.
   useEffect(() => {
@@ -375,14 +382,25 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
   /** First tap sets the start of the excerpt, the second its end; a third starts again. */
   const pick = (i: number) =>
     setPicking((p) => (!p || p.first === undefined || p.last !== undefined ? { first: i } : { first: p.first, last: i }));
+  const stopPicking = () => {
+    setPicking(null);
+    setSuggesting(false);
+    if (searchParams.has("drill")) setSearchParams({}, { replace: true });
+  };
   const togglePicking = () => {
     if (picking) {
-      setPicking(null);
+      stopPicking();
       return;
     }
     player.stop();
     setEditing(false);
     setPicking({});
+  };
+  /** A suggested section: pick its phrases and bring them into view. */
+  const chooseSuggestion = (s: { first: number; last: number; title: string }) => {
+    setPicking(s);
+    setSuggesting(false);
+    listRef.current?.querySelector<HTMLElement>(`[data-i="${s.first}"]`)?.scrollIntoView({ block: "start", behavior: "smooth" });
   };
 
   return (
@@ -469,8 +487,11 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
             segments={segments}
             first={picking.first}
             last={picking.last}
+            title={picking.title}
             existing={episodeDrills}
-            onClose={() => setPicking(null)}
+            suggestions={suggestions?.sections.length ?? 0}
+            onSuggest={() => setSuggesting(true)}
+            onClose={stopPicking}
           />
         ) : (
           <>
@@ -578,6 +599,18 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
           </>
         )}
       </div>
+
+      {suggesting && (
+        <ExcerptSuggestionsSheet
+          uid={uid}
+          episode={episode}
+          language={language}
+          segments={segments}
+          existing={episodeDrills}
+          onChoose={chooseSuggestion}
+          onClose={() => setSuggesting(false)}
+        />
+      )}
 
       {sheetPhrase && (
         <PhraseStudySheet uid={uid} episodeId={episode.id} phrase={sheetPhrase} onClose={() => setStudyIndex(undefined)} />
