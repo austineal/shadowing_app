@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useEpisode, useSegmentsDoc } from "../hooks/useEpisode";
+import { useDrills, useExcerptSuggestions } from "../hooks/useDrills";
 import { useSegmentPlayer } from "../hooks/useSegmentPlayer";
 import { useStudy, type Study } from "../hooks/useStudy";
 import { alignTranscript } from "../lib/align";
@@ -23,6 +24,8 @@ import { mergeSegments, segmentTokens, splitSegment } from "../lib/segmenter";
 import { sourceRate } from "../lib/sequence";
 import { loadDefaultSettings, saveDefaultSettings } from "../lib/settings";
 import { useOnline } from "../lib/offline";
+import { ExcerptPicker } from "../components/ExcerptPicker";
+import { ExcerptSuggestionsSheet } from "../components/ExcerptSuggestions";
 import { OfflineButton } from "../components/OfflineButton";
 import { StudySection } from "../components/StudySection";
 import { PhraseStudySheet } from "../components/PhraseStudySheet";
@@ -190,6 +193,13 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
   /** Phrase whose study sheet is open. */
   const [studyIndex, setStudyIndex] = useState<number>();
   const [editing, setEditing] = useState(false);
+  /** Choosing an excerpt to drill: the first and last phrases tapped so far. */
+  // ?drill=suggest (from the library's drill list) opens the picker with Claude's suggestions showing.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [picking, setPicking] = useState<{ first?: number; last?: number; title?: string } | null>(() =>
+    searchParams.get("drill") && language !== "auto" ? {} : null,
+  );
+  const [suggesting, setSuggesting] = useState(() => searchParams.get("drill") === "suggest" && language !== "auto");
   const [tokens, setTokens] = useState<TimedToken[] | null>(null);
   const [busy, setBusy] = useState<string>();
   const [notice, setNotice] = useState<string>();
@@ -216,6 +226,9 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
 
   const study = useStudy(uid, episode, segments, language, settings.englishVoice ?? DEFAULT_ENGLISH_VOICE);
   const player = useSegmentPlayer(src, { segments, settings, title: episode.title, getClip: study.getClip });
+  const allDrills = useDrills(uid);
+  const episodeDrills = useMemo(() => (allDrills ?? []).filter((d) => d.episodeId === episode.id), [allDrills, episode.id]);
+  const suggestions = useExcerptSuggestions(uid, episode.id);
 
   // Download English clips for the next few phrases so they're decoded before they're due.
   useEffect(() => {
@@ -357,6 +370,39 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
     [settings.mode],
   );
 
+  const inDrill = (s: Segment) => {
+    const mid = (s.start + s.end) / 2;
+    return episodeDrills.some((d) => mid >= d.start && mid < d.end);
+  };
+  const isPicked = (i: number) => {
+    if (picking?.first === undefined) return false;
+    const last = picking.last ?? picking.first;
+    return i >= Math.min(picking.first, last) && i <= Math.max(picking.first, last);
+  };
+  /** First tap sets the start of the excerpt, the second its end; a third starts again. */
+  const pick = (i: number) =>
+    setPicking((p) => (!p || p.first === undefined || p.last !== undefined ? { first: i } : { first: p.first, last: i }));
+  const stopPicking = () => {
+    setPicking(null);
+    setSuggesting(false);
+    if (searchParams.has("drill")) setSearchParams({}, { replace: true });
+  };
+  const togglePicking = () => {
+    if (picking) {
+      stopPicking();
+      return;
+    }
+    player.stop();
+    setEditing(false);
+    setPicking({});
+  };
+  /** A suggested section: pick its phrases and bring them into view. */
+  const chooseSuggestion = (s: { first: number; last: number; title: string }) => {
+    setPicking(s);
+    setSuggesting(false);
+    listRef.current?.querySelector<HTMLElement>(`[data-i="${s.first}"]`)?.scrollIntoView({ block: "start", behavior: "smooth" });
+  };
+
   return (
     <div className="page practice">
       <header className="topbar">
@@ -373,7 +419,22 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
               : ""}
           </div>
         </div>
-        <button className={`btn small ${editing ? "primary" : ""}`} onClick={() => setEditing((v) => !v)}>
+        {language !== "auto" && (
+          <button
+            className={`btn small ${picking ? "primary" : ""}`}
+            onClick={togglePicking}
+            title="Choose an excerpt to learn to say from its English"
+          >
+            Drill
+          </button>
+        )}
+        <button
+          className={`btn small ${editing ? "primary" : ""}`}
+          onClick={() => {
+            setPicking(null);
+            setEditing((v) => !v);
+          }}
+        >
           {editing ? "Done" : "Edit"}
         </button>
         <button className="btn ghost icon" aria-label="Settings" onClick={() => setShowSettings(true)}>
@@ -386,8 +447,10 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
           <div key={s.id} className="seg-row">
             <button
               data-i={i}
-              className={`seg ${i === player.index ? "current" : ""} ${i < player.index ? "done" : ""}`}
-              onClick={() => (editing ? player.select(i) : player.playSegment(i))}
+              className={`seg ${i === player.index && !picking ? "current" : ""} ${i < player.index ? "done" : ""} ${
+                inDrill(s) ? "in-drill" : ""
+              } ${isPicked(i) ? "picked" : ""}`}
+              onClick={() => (picking ? pick(i) : editing ? player.select(i) : player.playSegment(i))}
             >
               <span className="t">{formatTime(s.start)}</span>
               {s.text}
@@ -416,108 +479,138 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
       </div>
 
       <div className="dock">
-        {notice && (
-          <p className="small error" onClick={() => setNotice(undefined)}>
-            {notice}
-          </p>
-        )}
-        {player.error && <p className="small error">{player.error}</p>}
-        <div className={`phrase ${player.phase === "gap" ? "gap" : ""}`}>
-          {current ? current.text : "—"}
-        </div>
-        {settings.showTranslation && currentStudy && <div className="translation">{currentStudy.translation}</div>}
-        <div className="progress">
-          <div style={{ width: `${Math.round(player.progress * 100)}%` }} />
-        </div>
-        <div className="row small muted" style={{ justifyContent: "space-between" }}>
-          <span>
-            {player.index + 1} / {segments.length}
-            {settings.mode === "auto" && repeats > 1 && (
-              <span className="muted"> · play {Math.min(player.plays + 1, repeats)} of {repeats}</span>
+        {picking ? (
+          <ExcerptPicker
+            uid={uid}
+            episode={episode}
+            language={language}
+            segments={segments}
+            first={picking.first}
+            last={picking.last}
+            title={picking.title}
+            existing={episodeDrills}
+            suggestions={suggestions?.sections.length ?? 0}
+            onSuggest={() => setSuggesting(true)}
+            onClose={stopPicking}
+          />
+        ) : (
+          <>
+            {notice && (
+              <p className="small error" onClick={() => setNotice(undefined)}>
+                {notice}
+              </p>
             )}
-            {sourceRate(settings, player.plays + 1) < settings.rate && (
-              <span className="muted"> · {sourceRate(settings, player.plays + 1)}×</span>
-            )}
-          </span>
-          <span>
-            {player.phase === "gap"
-              ? "your turn…"
-              : player.phase === "clip"
-                ? "English…"
-                : current
-                  ? `${(current.end - current.start).toFixed(1)}s`
-                  : ""}
-          </span>
-          <span>{formatTime(current?.start)}</span>
-        </div>
-        <div className="controls">
-          <button className="btn icon" onClick={player.prev} disabled={player.index === 0} aria-label="Previous phrase">
-            ⏮
-          </button>
-          <button className="btn icon" onClick={player.replay} aria-label="Repeat phrase" disabled={!src}>
-            ↻
-          </button>
-          <button className="btn primary icon big" onClick={player.toggle} disabled={!src} aria-label="Play or pause">
-            {player.phase === "idle" ? "▶" : "⏸"}
-          </button>
-          <button
-            className="btn icon"
-            onClick={player.next}
-            disabled={player.index + 1 >= segments.length}
-            aria-label="Next phrase"
-          >
-            ⏭
-          </button>
-        </div>
-        <div className="modes">
-          {(["manual", "auto", "loop"] as const).map((m) => (
-            <button
-              key={m}
-              className={`btn small ${settings.mode === m ? "active" : ""}`}
-              onClick={() => setSettings((s) => ({ ...s, mode: m }))}
-            >
-              {{ manual: "Manual", auto: "Auto", loop: "Loop" }[m]}
-            </button>
-          ))}
-          {settings.mode === "auto" && (
-            <select
-              className="input"
-              style={{ width: "auto", padding: "4px 8px", minHeight: 32 }}
-              value={repeats}
-              onChange={(e) => setSettings((s) => ({ ...s, repeats: Number(e.target.value) }))}
-              aria-label="Repeats per phrase"
-              title="How many times each phrase plays before moving on"
-            >
-              {(REPEAT_PRESETS.includes(repeats as (typeof REPEAT_PRESETS)[number])
-                ? REPEAT_PRESETS
-                : [...REPEAT_PRESETS, repeats].sort((a, b) => a - b)
-              ).map((n) => (
-                <option key={n} value={n}>
-                  {n === 1 ? "once" : `${n}× each`}
-                </option>
+            {player.error && <p className="small error">{player.error}</p>}
+            <div className={`phrase ${player.phase === "gap" ? "gap" : ""}`}>
+              {current ? current.text : "—"}
+            </div>
+            {settings.showTranslation && currentStudy && <div className="translation">{currentStudy.translation}</div>}
+            <div className="progress">
+              <div style={{ width: `${Math.round(player.progress * 100)}%` }} />
+            </div>
+            <div className="row small muted" style={{ justifyContent: "space-between" }}>
+              <span>
+                {player.index + 1} / {segments.length}
+                {settings.mode === "auto" && repeats > 1 && (
+                  <span className="muted"> · play {Math.min(player.plays + 1, repeats)} of {repeats}</span>
+                )}
+                {sourceRate(settings, player.plays + 1) < settings.rate && (
+                  <span className="muted"> · {sourceRate(settings, player.plays + 1)}×</span>
+                )}
+              </span>
+              <span>
+                {player.phase === "gap"
+                  ? "your turn…"
+                  : player.phase === "clip"
+                    ? "English…"
+                    : current
+                      ? `${(current.end - current.start).toFixed(1)}s`
+                      : ""}
+              </span>
+              <span>{formatTime(current?.start)}</span>
+            </div>
+            <div className="controls">
+              <button className="btn icon" onClick={player.prev} disabled={player.index === 0} aria-label="Previous phrase">
+                ⏮
+              </button>
+              <button className="btn icon" onClick={player.replay} aria-label="Repeat phrase" disabled={!src}>
+                ↻
+              </button>
+              <button className="btn primary icon big" onClick={player.toggle} disabled={!src} aria-label="Play or pause">
+                {player.phase === "idle" ? "▶" : "⏸"}
+              </button>
+              <button
+                className="btn icon"
+                onClick={player.next}
+                disabled={player.index + 1 >= segments.length}
+                aria-label="Next phrase"
+              >
+                ⏭
+              </button>
+            </div>
+            <div className="modes">
+              {(["manual", "auto", "loop"] as const).map((m) => (
+                <button
+                  key={m}
+                  className={`btn small ${settings.mode === m ? "active" : ""}`}
+                  onClick={() => setSettings((s) => ({ ...s, mode: m }))}
+                >
+                  {{ manual: "Manual", auto: "Auto", loop: "Loop" }[m]}
+                </button>
               ))}
-            </select>
-          )}
-          {study.enabled && (
-            <button className="btn small" disabled={!currentStudy} onClick={openStudy} title="Translation, notes and questions">
-              Study{currentStudy && visibleNotes(currentStudy).length > 0 ? ` · ${visibleNotes(currentStudy).length}` : ""}
-            </button>
-          )}
-          <select
-            className="input"
-            style={{ width: "auto", padding: "4px 8px", minHeight: 32 }}
-            value={settings.rate}
-            onChange={(e) => setSettings((s) => ({ ...s, rate: Number(e.target.value) }))}
-            aria-label="Playback speed"
-          >
-            {[0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.25].map((r) => (
-              <option key={r} value={r}>
-                {r}×
-              </option>
-            ))}
-          </select>
-        </div>
+              {settings.mode === "auto" && (
+                <select
+                  className="input"
+                  style={{ width: "auto", padding: "4px 8px", minHeight: 32 }}
+                  value={repeats}
+                  onChange={(e) => setSettings((s) => ({ ...s, repeats: Number(e.target.value) }))}
+                  aria-label="Repeats per phrase"
+                  title="How many times each phrase plays before moving on"
+                >
+                  {(REPEAT_PRESETS.includes(repeats as (typeof REPEAT_PRESETS)[number])
+                    ? REPEAT_PRESETS
+                    : [...REPEAT_PRESETS, repeats].sort((a, b) => a - b)
+                  ).map((n) => (
+                    <option key={n} value={n}>
+                      {n === 1 ? "once" : `${n}× each`}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {study.enabled && (
+                <button className="btn small" disabled={!currentStudy} onClick={openStudy} title="Translation, notes and questions">
+                  Study{currentStudy && visibleNotes(currentStudy).length > 0 ? ` · ${visibleNotes(currentStudy).length}` : ""}
+                </button>
+              )}
+              <select
+                className="input"
+                style={{ width: "auto", padding: "4px 8px", minHeight: 32 }}
+                value={settings.rate}
+                onChange={(e) => setSettings((s) => ({ ...s, rate: Number(e.target.value) }))}
+                aria-label="Playback speed"
+              >
+                {[0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.25].map((r) => (
+                  <option key={r} value={r}>
+                    {r}×
+                  </option>
+                ))}
+              </select>
+            </div>
+          </>
+        )}
       </div>
+
+      {suggesting && (
+        <ExcerptSuggestionsSheet
+          uid={uid}
+          episode={episode}
+          language={language}
+          segments={segments}
+          existing={episodeDrills}
+          onChoose={chooseSuggestion}
+          onClose={() => setSuggesting(false)}
+        />
+      )}
 
       {sheetPhrase && (
         <PhraseStudySheet uid={uid} episodeId={episode.id} phrase={sheetPhrase} onClose={() => setStudyIndex(undefined)} />

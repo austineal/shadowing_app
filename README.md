@@ -20,6 +20,7 @@ desktop and installs to the Android home screen from Chrome.
 | `web/` | Vite + React + TypeScript PWA (`src/pages`, `src/hooks`, `src/lib`) |
 | `web/src/lib/segmenter.ts` | Phrase segmentation from timed tokens |
 | `web/src/lib/align.ts` | Aligns a user transcript to speech-recognition words |
+| `web/src/lib/drill/` | Drill: passages, review schedule, session cadence, session plan and steps |
 | `functions/` | Cloud Functions (Node 22, europe-west2): transcription trigger, RSS import, retry |
 | `firestore.rules`, `storage.rules` | Owner-only access, allow-listed by email |
 
@@ -114,12 +115,55 @@ background). Phrases and gaps should keep alternating, and the lock-screen
 controls should skip and repeat phrases. Check with both a saved-offline episode
 and a streamed one, since the service worker serves the former.
 
+## Drill (spaced repetition)
+
+Optional practice for learning to *say* an excerpt: you hear the English, say the
+original, then hear it as the answer. Passive listening and study mode are
+unaffected.
+
+- **Choosing an excerpt.** Tap **Drill** on an episode, then tap the excerpt's first
+  and last phrases, or tap **Suggest excerpts**: Claude (`suggestExcerpts`) splits the
+  episode into self-contained sections rated for speaking practice, each about two
+  weeks of new material long at that language's pace. The pace is estimated from the
+  schedule until there are two weeks of sessions, then measured from them. Choosing an
+  excerpt queues translations for just that stretch (`prepareDrillStudy`), without
+  turning study mode on for the whole episode, and has Claude (`planDrillPassages`)
+  split it into titled passages of about 40 seconds at natural breaks. Until that
+  arrives, passages are cut at pauses and sentence ends. When every excerpt in a
+  language is learned, the library links to the next suggestion in the same episode.
+- **Sessions.** Each language has its own schedule (**Drill schedules** in the
+  library): how often it comes up (up to three times a day, down to weekly), how long
+  a session is, whether it learns new material, and a full or light learning drill.
+  Languages on the same every-few-days rhythm take turns. The library's **Drills** box
+  shows which are due. A session reviews due passages first (most overdue first, then
+  in story order, each led in by the phrase before it), then learns new passages of the
+  current excerpt with the time left, stopping partway through a passage if need be
+  and resuming next time.
+- **Learning** a phrase: its English, listen and repeat, a first try from the English,
+  then joined to the phrase before. A passage finishes with every phrase from its
+  English and a straight run-through to shadow.
+- **Reviews and grading.** Each phrase is tested cold: English, a pause to say it
+  (shorter as the passage matures), then the original. Press **Missed** (or ⏮ on the
+  lock screen or headset) if you couldn't; that jumps to the answer and adds a fix-up
+  round. A passage passes with at most one miss and moves up a level (next review
+  after 1, 3, 7, 15, 30, 60, 120, then 240 days); a fail moves it down one. Passing
+  after a longer gap than planned moves it up to the level that gap matches.
+- **Screen off.** The English is synthesised on the device before a session starts,
+  and the session plays through the same background graph as practice.
+
+Data: `users/{uid}/drills/{id}` holds an excerpt and its passages (time ranges, so
+phrase edits don't orphan them, with each passage's level and due date);
+`users/{uid}/prefs/drill` the schedules; `users/{uid}/drillSessions/{id}` a log of
+sessions, which the schedules count only once a session has finished something, and
+which record the audio learned for measuring pace. An episode's suggested excerpts
+are at `users/{uid}/episodes/{id}/data/excerpts`.
+
 ## Development
 
 ```bash
 npm install --prefix web && npm install --prefix functions
 npm run dev          # Vite dev server on http://localhost:5173 (talks to the live Firebase project)
-npm test             # unit tests for segmenter and aligner
+npm test             # unit tests (segmenter, aligner, player steps, drill scheduling)
 npm run typecheck
 ```
 

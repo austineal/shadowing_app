@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { DrillToday } from "../components/DrillToday";
 import { FolderSelect } from "../components/FolderSelect";
 import { OfflineButton } from "../components/OfflineButton";
 import { useEpisodes } from "../hooks/useEpisode";
@@ -108,6 +109,8 @@ export default function Library({ uid }: { uid: string }) {
       </header>
 
       {(error ?? foldersError ?? subsError) && <p className="error section">{error ?? foldersError ?? subsError}</p>}
+
+      <DrillToday uid={uid} />
 
       {subscriptions && subscriptions.length > 0 && <PodcastStrip subscriptions={subscriptions} />}
 

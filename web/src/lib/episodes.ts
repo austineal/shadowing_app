@@ -3,6 +3,7 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
@@ -10,6 +11,7 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
+  where,
   type DocumentData,
   type QueryDocumentSnapshot,
   type Unsubscribe,
@@ -252,12 +254,21 @@ export async function deleteEpisode(uid: string, episode: Episode): Promise<void
   const listing = await listAll(folder).catch(() => ({ items: [] as ReturnType<typeof ref>[] }));
   await Promise.all(listing.items.map((item) => deleteObject(item).catch(() => undefined)));
   await deleteDoc(segmentsDoc(uid, episodeId)).catch(() => undefined);
+  await deleteDoc(doc(db, "users", uid, "episodes", episodeId, "data", "excerpts")).catch(() => undefined);
+  // Drill excerpts of the episode go with it.
+  const drills = await getDocs(query(collection(db, "users", uid, "drills"), where("episodeId", "==", episodeId))).catch(() => null);
+  await Promise.all((drills?.docs ?? []).map((d) => deleteDoc(d.ref).catch(() => undefined)));
   await deleteDoc(episodeDoc(uid, episodeId));
 }
 
 export async function getEpisodeOnce(uid: string, episodeId: string): Promise<Episode | null> {
   const snap = await getDoc(episodeDoc(uid, episodeId));
   return snap.exists() ? toEpisode({ id: snap.id, data: () => snap.data() }) : null;
+}
+
+export async function getSegmentsOnce(uid: string, episodeId: string): Promise<SegmentsDoc | null> {
+  const snap = await getDoc(segmentsDoc(uid, episodeId));
+  return snap.exists() ? (snap.data() as SegmentsDoc) : null;
 }
 
 // ---- Cloud Functions ----
