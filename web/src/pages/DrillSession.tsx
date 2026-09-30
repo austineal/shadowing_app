@@ -3,104 +3,20 @@ import { Link, useParams } from "react-router-dom";
 import { useDrillPlayer, type DrillAudioOptions } from "../hooks/useDrillPlayer";
 import { useNow } from "../hooks/useDrills";
 import { synthesizeAll } from "../lib/drill/clips";
-import { CUE_LABEL, DEFAULT_SCHEDULE, formatMinutes, formatNext } from "../lib/drill/labels";
-import { phrasesIn } from "../lib/drill/passages";
-import { frontier, planSession, type PlanDrill, type SessionPlan } from "../lib/drill/plan";
-import { DrillSession, type Block, type SessionEvent } from "../lib/drill/session";
-import { isDue, learnedPassage, reviewedPassage } from "../lib/drill/srs";
-import { drillOptions, type DrillOptions, type SessionPhrase } from "../lib/drill/steps";
-import {
-  getDrillPrefs,
-  getDrills,
-  loadTranslations,
-  prepareDrillStudy,
-  saveDrillProgress,
-  startSessionLog,
-  updateSessionLog,
-} from "../lib/drill/store";
-import { ensureAudioUrl, getEpisodeOnce, getSegmentsOnce } from "../lib/episodes";
+import { CUE_LABEL, formatMinutes, formatNext } from "../lib/drill/labels";
+import { frontier } from "../lib/drill/plan";
+import { prefetchDrillEnglish } from "../lib/drill/prefetch";
+import { prepareSession, type Prepared } from "../lib/drill/prepare";
+import { DrillSession, type SessionEvent } from "../lib/drill/session";
+import { learnedPassage, reviewedPassage } from "../lib/drill/srs";
+import type { SessionPhrase } from "../lib/drill/steps";
+import { prepareDrillStudy, saveDrillProgress, startSessionLog, updateSessionLog } from "../lib/drill/store";
 import { formatTime } from "../lib/format";
 import { languageLabel } from "../lib/languages";
-import { loadDefaultSettings } from "../lib/settings";
-import { normalizePhrase } from "../lib/study";
-import { DEFAULT_ENGLISH_VOICE, isVoiceStored, loadVoice } from "../lib/tts/client";
-import type { Drill, DrillSchedule, DrillSessionLog } from "../types";
-
-interface Prepared {
-  schedule: DrillSchedule;
-  opts: DrillOptions;
-  plan: SessionPlan;
-  drills: Drill[];
-  /** Audio URL of each episode the plan plays from. */
-  sources: Record<string, string>;
-  /** English the plan needs synthesised. */
-  english: string[];
-  /** Phrases in the plan with no translation yet; they can only be heard and repeated. */
-  untranslated: number;
-  /** The earliest upcoming review, to mention when there's nothing to do now. */
-  nextDue?: number;
-}
+import { isVoiceStored, loadVoice } from "../lib/tts/client";
+import type { Drill, DrillSessionLog } from "../types";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
-
-/** The phrases a block drills: a learning block may cover only part of its passage. */
-function blockPhrases(b: Block): SessionPhrase[] {
-  if (b.kind === "review" || b.wrapUp) return b.phrases;
-  return b.phrases.slice(Math.max(0, b.from - 1), b.to);
-}
-
-async function prepare(uid: string, language: string, now: number): Promise<Prepared> {
-  const [prefs, drills] = await Promise.all([getDrillPrefs(uid), getDrills(uid, language)]);
-  const schedule = prefs.schedules[language] ?? DEFAULT_SCHEDULE;
-  const opts = drillOptions(schedule.learning, loadDefaultSettings());
-  const loaded = (
-    await Promise.all(
-      drills.map(async (drill) => {
-        const [episode, segDoc] = await Promise.all([getEpisodeOnce(uid, drill.episodeId), getSegmentsOnce(uid, drill.episodeId)]);
-        return episode && segDoc ? { drill, episode, segments: segDoc.segments } : undefined;
-      }),
-    )
-  ).filter((x) => x !== undefined);
-
-  // English for the passages this session could use: every due one and the next few to learn.
-  const texts: string[] = [];
-  for (const { drill, segments } of loaded) {
-    const f = frontier(drill);
-    drill.passages.forEach((p, i) => {
-      if (isDue(p, now) || (f >= 0 && i >= f && i < f + 3)) texts.push(...phrasesIn(segments, p.start, p.end).map((s) => s.text));
-    });
-  }
-  const english = await loadTranslations(uid, language, texts);
-  const planDrills: PlanDrill[] = loaded.map(({ drill, segments }) => ({
-    drill,
-    phrases: segments.map((s) => ({ start: s.start, end: s.end, text: s.text, english: english.get(normalizePhrase(s.text)) })),
-  }));
-  const plan = planSession({ now, budgetSec: schedule.minutes * 60, newMaterial: schedule.newMaterial, opts, drills: planDrills });
-
-  const sources: Record<string, string> = {};
-  for (const { episode } of loaded) {
-    if (plan.blocks.some((b) => b.episodeId === episode.id)) sources[episode.id] = await ensureAudioUrl(uid, episode);
-  }
-  const needed = new Set<string>();
-  let untranslated = 0;
-  for (const b of plan.blocks) {
-    for (const p of blockPhrases(b)) {
-      if (p.english) needed.add(p.english);
-      else untranslated++;
-    }
-  }
-  const upcoming = loaded.flatMap(({ drill }) => drill.passages.flatMap((p) => (p.level !== undefined && p.due ? [p.due] : [])));
-  return {
-    schedule,
-    opts,
-    plan,
-    drills: loaded.map((l) => l.drill),
-    sources,
-    english: [...needed],
-    untranslated,
-    nextDue: upcoming.length ? Math.min(...upcoming) : undefined,
-  };
-}
 
 type Tally = Pick<DrillSessionLog, "reviewed" | "passed" | "learnedPhrases"> & { learnedPassages: number };
 
@@ -185,7 +101,7 @@ function SessionLoader({ uid, language }: { uid: string; language: string }) {
   const [error, setError] = useState<string>();
   useEffect(() => {
     let cancelled = false;
-    prepare(uid, language, Date.now()).then(
+    prepareSession(uid, language, Date.now()).then(
       (p) => !cancelled && setPrepared(p),
       (e) => !cancelled && setError(message(e)),
     );
@@ -225,7 +141,7 @@ function phraseAt(phrases: SessionPhrase[], t: number): SessionPhrase {
 function SessionView({ uid, language, prepared }: { uid: string; language: string; prepared: Prepared }) {
   const { plan, opts } = prepared;
   const title = `${languageLabel(language)} drill`;
-  const [voiceId] = useState(() => loadDefaultSettings().englishVoice ?? DEFAULT_ENGLISH_VOICE);
+  const voiceId = prepared.voice;
   const needsVoice = prepared.english.length > 0;
   const [voiceReady, setVoiceReady] = useState<boolean>();
   const [download, setDownload] = useState<{ loaded: number; total: number }>();
@@ -303,6 +219,16 @@ function SessionView({ uid, language, prepared }: { uid: string; language: strin
   useEffect(() => {
     if (player.state === "paused" || player.state === "finished") recorder.touch();
   }, [player.state, recorder]);
+
+  // Once the session is over, get the English for the next one ready while the app is still open.
+  useEffect(() => {
+    if (player.state !== "finished") return;
+    let cancelled = false;
+    void prefetchDrillEnglish(uid, [language], voiceId, () => cancelled, true);
+    return () => {
+      cancelled = true;
+    };
+  }, [player.state, uid, language, voiceId]);
   useEffect(() => () => recorder.touch(), [recorder]);
 
   // Lock screen: what to do now.

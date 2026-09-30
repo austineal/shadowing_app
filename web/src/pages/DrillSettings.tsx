@@ -6,13 +6,14 @@ import { pickAnchorDay } from "../lib/drill/cadence";
 import { DEFAULT_SCHEDULE, FREQUENCIES, SESSION_MINUTES, frequencyOf } from "../lib/drill/labels";
 import { frontier } from "../lib/drill/plan";
 import { dayNumber, isDue, isLearned } from "../lib/drill/srs";
-import { deleteDrill, setSchedule } from "../lib/drill/store";
-import { formatTime } from "../lib/format";
+import { drillVoice } from "../lib/drill/prepare";
+import { deleteDrill, setDrillVoice, setSchedule } from "../lib/drill/store";
+import { formatBytes, formatTime } from "../lib/format";
 import { languageLabel } from "../lib/languages";
 import { episodeLanguage } from "../lib/organise";
-import { loadDefaultSettings, saveDefaultSettings } from "../lib/settings";
 import { setStudyLevel, subscribeStudyLevels } from "../lib/study";
 import { ENGLISH_VOICES, isVoiceStored, loadVoice } from "../lib/tts/client";
+import { clearClips, storedClipBytes } from "../lib/tts/clipCache";
 import { CEFR_LEVELS, type CefrLevel, type Drill, type DrillSchedule } from "../types";
 
 /** The schedule with an anchor day that takes turns with other languages on the same rhythm. */
@@ -76,7 +77,7 @@ export default function DrillSettings({ uid }: { uid: string }) {
         </div>
       )}
       <div className="section">
-        <EnglishVoice />
+        <EnglishVoice uid={uid} voice={drillVoice(prefs)} />
       </div>
     </div>
   );
@@ -215,28 +216,25 @@ function ExcerptRow({ uid, drill }: { uid: string; drill: Drill }) {
 }
 
 /** The on-device voice that reads the English cues (shared with the practice player's English audio). */
-function EnglishVoice() {
-  const [voiceId, setVoiceId] = useState(() => loadDefaultSettings().englishVoice);
+/** The on-device voice that reads drills' English cues, and the clips it has made. */
+function EnglishVoice({ uid, voice }: { uid: string; voice: string }) {
   const [stored, setStored] = useState<boolean>();
   const [download, setDownload] = useState<{ loaded: number; total: number }>();
+  const [clipBytes, setClipBytes] = useState(() => storedClipBytes());
   const [error, setError] = useState<string>();
   useEffect(() => {
     let cancelled = false;
-    void isVoiceStored(voiceId).then((ok) => !cancelled && setStored(ok));
+    void isVoiceStored(voice).then((ok) => !cancelled && setStored(ok));
     return () => {
       cancelled = true;
     };
-  }, [voiceId]);
+  }, [voice]);
 
-  const change = (id: string) => {
-    saveDefaultSettings({ ...loadDefaultSettings(), englishVoice: id });
-    setVoiceId(id);
-  };
   const fetchVoice = async () => {
     setError(undefined);
     setDownload({ loaded: 0, total: 0 });
     try {
-      await loadVoice(voiceId, (loaded, total) => setDownload({ loaded, total }));
+      await loadVoice(voice, (loaded, total) => setDownload({ loaded, total }));
       setStored(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -249,7 +247,7 @@ function EnglishVoice() {
     <div>
       <label className="field-row">
         <span>English voice</span>
-        <select className="input" value={voiceId} onChange={(e) => change(e.target.value)}>
+        <select className="input" value={voice} onChange={(e) => void setDrillVoice(uid, e.target.value).catch((err) => setError(String(err)))}>
           {ENGLISH_VOICES.map((v) => (
             <option key={v.id} value={v.id}>
               {v.label}
@@ -267,8 +265,19 @@ function EnglishVoice() {
         </button>
       )}
       <p className="small muted" style={{ marginTop: 6 }}>
-        Reads the English cues on this device, so drills work offline once it's downloaded.
+        Reads the English cues on this device, so drills work offline once it's downloaded. The clips it makes are kept, and
+        made ahead while the library is open, so sessions can start at once.
       </p>
+      <div className="row small" style={{ marginTop: 8, justifyContent: "space-between" }}>
+        <span className="muted">English clips on this device: {formatBytes(clipBytes)}</span>
+        <button
+          className="btn ghost small"
+          disabled={clipBytes === 0}
+          onClick={() => void clearClips().then(() => setClipBytes(storedClipBytes()))}
+        >
+          Clear
+        </button>
+      </div>
       {error && <p className="small error">{error}</p>}
     </div>
   );

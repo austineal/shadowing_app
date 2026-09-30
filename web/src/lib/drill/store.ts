@@ -75,13 +75,24 @@ export function saveDrillProgress(uid: string, drill: Pick<Drill, "id" | "passag
   }).catch(() => undefined);
 }
 
+function toPrefs(snap: { get: (field: string) => unknown }): DrillPrefs {
+  const voice = snap.get("voice");
+  return {
+    schedules: (snap.get("schedules") ?? {}) as Record<string, DrillSchedule>,
+    ...(typeof voice === "string" ? { voice } : {}),
+  };
+}
+
 export function subscribeDrillPrefs(uid: string, cb: (prefs: DrillPrefs) => void, onError?: (e: Error) => void): Unsubscribe {
-  return onSnapshot(prefsDoc(uid), (snap) => cb({ schedules: (snap.get("schedules") ?? {}) as Record<string, DrillSchedule> }), onError);
+  return onSnapshot(prefsDoc(uid), (snap) => cb(toPrefs(snap)), onError);
 }
 
 export async function getDrillPrefs(uid: string): Promise<DrillPrefs> {
-  const snap = await getDoc(prefsDoc(uid));
-  return { schedules: (snap.get("schedules") ?? {}) as Record<string, DrillSchedule> };
+  return toPrefs(await getDoc(prefsDoc(uid)));
+}
+
+export async function setDrillVoice(uid: string, voice: string): Promise<void> {
+  await setDoc(prefsDoc(uid), { voice }, { merge: true });
 }
 
 /** Sets a language's schedule (replacing it whole), or removes it with null. */
