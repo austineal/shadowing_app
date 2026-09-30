@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { createGraph, outputOf, schedule, type Graph } from "../lib/audioGraph";
+import { createGraph, outputOf, schedule, startOutput, type Graph } from "../lib/audioGraph";
 import type { Current, DrillSession } from "../lib/drill/session";
 import type { Play } from "../lib/drill/steps";
 
@@ -290,9 +290,9 @@ class DrillAudio {
       /* retried on the next play */
     }
     for (const s of this.sources.values()) this.connect(g, s);
-    if (g.direct || !g.out.paused) return;
+    if (g.direct) return;
     try {
-      await g.out.play();
+      await startOutput(g);
     } catch {
       // The output element refused to play: send audio straight to the speakers instead.
       g.direct = true;

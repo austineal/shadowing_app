@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createGraph, schedule, type Graph } from "../lib/audioGraph";
+import { createGraph, schedule, startOutput, type Graph } from "../lib/audioGraph";
 import { gapSeconds, nextAction, sourceRate, stepsAfterSource, type ClipKind, type FollowStep } from "../lib/sequence";
 import type { PracticeSettings, Segment } from "../types";
 
@@ -126,7 +126,7 @@ export function useSegmentPlayer(audioSrc: string | undefined, opts: Options) {
     }
     if (g.direct) return;
     try {
-      if (g.out.paused) await g.out.play();
+      await startOutput(g);
     } catch {
       // Output element refused to play; route audio straight out instead.
       g.direct = true;
@@ -134,6 +134,12 @@ export function useSegmentPlayer(audioSrc: string | undefined, opts: Options) {
       sourceRef.current.connect(g.ctx.destination);
     }
   }, []);
+
+  /**
+   * Bumped by every start and stop, so a start overtaken while the output was starting (which
+   * takes a moment the first time; see startOutput) doesn't go on to play.
+   */
+  const startTokenRef = useRef(0);
 
   const api = useRef({
     /** keepPlays: true when called by the auto-advance timer, so the repeat count carries over. */
@@ -152,6 +158,7 @@ export function useSegmentPlayer(audioSrc: string | undefined, opts: Options) {
   };
 
   api.current.stop = () => {
+    startTokenRef.current++;
     clearTimers();
     audioRef.current?.pause();
     graphRef.current?.out.pause();
@@ -273,10 +280,12 @@ export function useSegmentPlayer(audioSrc: string | undefined, opts: Options) {
     const start = Math.max(0, seg.start - pad);
     const end = seg.end + pad;
     a.playbackRate = sourceRate(settings, playsRef.current + 1);
+    const token = ++startTokenRef.current;
 
     const begin = async () => {
       try {
         await startGraph(a);
+        if (startTokenRef.current !== token) return; // stopped or replaced while the output started
         a.currentTime = start;
         await a.play();
       } catch (e) {

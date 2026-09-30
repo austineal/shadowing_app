@@ -13,6 +13,8 @@ export interface Graph {
   out: HTMLAudioElement;
   /** Set when the output element couldn't play; audio goes straight to ctx.destination. */
   direct: boolean;
+  /** Whether the output element has had its first, settling start (see startOutput). */
+  settled: boolean;
 }
 
 export function createGraph(): Graph | null {
@@ -33,10 +35,32 @@ export function createGraph(): Graph | null {
         /* unsupported */
       }
     }
-    return { ctx, dest, out, direct: false };
+    return { ctx, dest, out, direct: false, settled: false };
   } catch {
     return null;
   }
+}
+
+/** How long the output element runs before its restart (see startOutput). */
+const OUTPUT_SETTLE_SEC = 0.4;
+
+/**
+ * Starts the keep-alive output element, if it isn't playing. Started cold on a phone, it can build
+ * up a backlog while the audio output opens and then work it off by playing fast: heard as the
+ * second play of the first phrase speeding up, until pausing and playing again cured it. So the
+ * first start runs it briefly and restarts it with the output already open before returning; later
+ * starts (after a pause) play at once. Throws if the element won't play, so callers can send audio
+ * straight to the speakers instead.
+ */
+export async function startOutput(g: Graph): Promise<void> {
+  if (!g.out.paused) return;
+  await g.out.play();
+  if (g.settled) return;
+  g.settled = true;
+  await new Promise<void>((resolve) => schedule(g, OUTPUT_SETTLE_SEC, resolve));
+  if (g.out.paused) return; // stopped meanwhile
+  g.out.pause();
+  await g.out.play();
 }
 
 /** Where sources should connect: the keep-alive stream, or the speakers once that has failed. */
