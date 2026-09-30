@@ -56,26 +56,71 @@ async function fetchCached(url: string, onProgress?: ProgressFn): Promise<Respon
   return copy;
 }
 
-let phonemizer: Promise<{ module: PiperPhonemizeModule; lines: string[] }> | undefined;
+/**
+ * The phonemiser build leaks memory on every call (piper_phonemize's main() re-initialises
+ * espeak-ng each time) into a fixed-size heap, and crashes after roughly 60-80 calls depending on
+ * text length. So each instance is replaced well before that. Its code is compiled and its 18 MB
+ * espeak-ng data downloaded only once (see phonemizerFiles), so a fresh instance is cheap.
+ */
+const PHONEMIZER_CALLS_PER_INSTANCE = 20;
+
+let phonemizer: Promise<{ module: PiperPhonemizeModule; lines: string[]; calls: number }> | undefined;
+
+let files: Promise<{ wasm: WebAssembly.Module; data: ArrayBuffer }> | undefined;
+
+/** The phonemiser's compiled code and espeak-ng data, fetched once per worker. */
+function phonemizerFiles() {
+  if (!files) {
+    files = Promise.all([
+      fetch(`${PHONEMIZE_BASE}.wasm`).then((r) => r.arrayBuffer()).then((b) => WebAssembly.compile(b)),
+      fetch(`${PHONEMIZE_BASE}.data`).then((r) => {
+        if (!r.ok) throw new Error(`Phonemiser data download failed (${r.status}).`);
+        return r.arrayBuffer();
+      }),
+    ]).then(([wasm, data]) => ({ wasm, data }));
+    files.catch(() => (files = undefined));
+  }
+  return files;
+}
 
 function getPhonemizer() {
   if (!phonemizer) {
-    const state = { lines: [] as string[] };
-    phonemizer = createPiperPhonemize({
-      print: (line) => state.lines.push(line),
-      printErr: (line) => console.warn("[phonemize]", line),
-      locateFile: (url) => (url.endsWith(".wasm") ? `${PHONEMIZE_BASE}.wasm` : url.endsWith(".data") ? `${PHONEMIZE_BASE}.data` : url),
-    }).then((module) => Object.assign(state, { module }));
+    const state = { lines: [] as string[], calls: 0 };
+    phonemizer = phonemizerFiles()
+      .then(({ wasm, data }) =>
+        createPiperPhonemize({
+          print: (line) => state.lines.push(line),
+          printErr: (line) => console.warn("[phonemize]", line),
+          instantiateWasm: (imports, receive) => {
+            void WebAssembly.instantiate(wasm, imports).then((instance) => receive(instance, wasm));
+            return {};
+          },
+          // A copy per instance, in case espeak-ng writes to its files.
+          getPreloadedPackage: () => data.slice(0),
+        }),
+      )
+      .then((module) => Object.assign(state, { module }));
+    phonemizer.catch(() => (phonemizer = undefined));
   }
   return phonemizer;
 }
 
-/** Phoneme id sequences for `text`, one per sentence. */
-async function phonemize(text: string, espeakVoice: string): Promise<number[][]> {
+async function phonemizeOnce(text: string, espeakVoice: string): Promise<number[][]> {
   const p = await getPhonemizer();
+  if (++p.calls >= PHONEMIZER_CALLS_PER_INSTANCE) phonemizer = undefined; // next call gets a fresh one
   p.lines.length = 0;
   p.module.callMain(["-l", espeakVoice, "--input", JSON.stringify([{ text }]), "--espeak_data", "/espeak-ng-data"]);
   return p.lines.map((l) => (JSON.parse(l) as { phoneme_ids: number[] }).phoneme_ids);
+}
+
+/** Phoneme id sequences for `text`, one per sentence. Retries once on a fresh instance. */
+async function phonemize(text: string, espeakVoice: string): Promise<number[][]> {
+  try {
+    return await phonemizeOnce(text, espeakVoice);
+  } catch {
+    phonemizer = undefined;
+    return phonemizeOnce(text, espeakVoice);
+  }
 }
 
 export interface Speech {

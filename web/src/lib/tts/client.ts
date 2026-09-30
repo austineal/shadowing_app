@@ -23,12 +23,29 @@ const pending = new Map<
   { resolve: (r: Extract<TtsResponse, { type: "done" }>) => void; reject: (e: Error) => void; onProgress?: ProgressFn }
 >();
 
+/** A worker that has sent nothing for this long while requests are outstanding is treated as hung. */
+const STALL_MS = 30_000;
+let lastHeard = 0;
+let watchdog: number | undefined;
+
 type WithoutId<T> = T extends unknown ? Omit<T, "id"> : never;
+
+/** Drops the worker and fails everything waiting on it; the next request starts a new one. */
+function restartWorker(reason: string) {
+  worker?.terminate();
+  worker = undefined;
+  window.clearInterval(watchdog);
+  watchdog = undefined;
+  const waiting = [...pending.values()];
+  pending.clear();
+  for (const p of waiting) p.reject(new Error(reason));
+}
 
 function send(req: WithoutId<TtsRequest>, onProgress?: ProgressFn) {
   if (!worker) {
     worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
     worker.onmessage = (e: MessageEvent<TtsResponse>) => {
+      lastHeard = performance.now();
       const m = e.data;
       const p = pending.get(m.id);
       if (!p) return;
@@ -39,7 +56,12 @@ function send(req: WithoutId<TtsRequest>, onProgress?: ProgressFn) {
         else p.reject(new Error(m.message));
       }
     };
+    worker.onerror = (e) => restartWorker(`Speech worker crashed: ${e.message}`);
+    watchdog = window.setInterval(() => {
+      if (pending.size > 0 && performance.now() - lastHeard > STALL_MS) restartWorker("Speech worker stopped responding.");
+    }, 5_000);
   }
+  if (pending.size === 0) lastHeard = performance.now();
   const id = nextId++;
   return new Promise<Extract<TtsResponse, { type: "done" }>>((resolve, reject) => {
     pending.set(id, { resolve, reject, onProgress });
