@@ -1,11 +1,14 @@
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useDrillPrefs, useDrills, useNow, useRecentSessions } from "../hooks/useDrills";
 import { availability, type Availability } from "../lib/drill/cadence";
 import { formatNext } from "../lib/drill/labels";
 import { learningDrill } from "../lib/drill/plan";
+import { prefetchDrillEnglish } from "../lib/drill/prefetch";
+import { drillVoice } from "../lib/drill/prepare";
 import { isDue } from "../lib/drill/srs";
 import { languageLabel } from "../lib/languages";
-import type { Drill, DrillSchedule } from "../types";
+import type { Drill, DrillPrefs, DrillSchedule, DrillSessionLog } from "../types";
 
 interface Row {
   language: string;
@@ -18,25 +21,9 @@ interface Row {
   latest?: Drill;
 }
 
-/** The library's list of drill sessions: which languages are due now and when the others come up. */
-export function DrillToday({ uid }: { uid: string }) {
-  const prefs = useDrillPrefs(uid);
-  const drills = useDrills(uid);
-  const sessions = useRecentSessions(uid);
-  const now = useNow();
-  if (!prefs || !drills || !sessions) return null;
-
-  const languages = Object.keys(prefs.schedules);
-  if (languages.length === 0) {
-    return (
-      <p className="drill-intro small muted">
-        <b>Drill</b>: learn to say passages of an episode from their English, on a schedule for each language.{" "}
-        <Link to="/drill/settings">Set up ›</Link>
-      </p>
-    );
-  }
-
-  const rows: Row[] = languages
+/** One row per scheduled language, due ones first. */
+function buildRows(prefs: DrillPrefs, drills: Drill[], sessions: DrillSessionLog[], now: number): Row[] {
+  return Object.keys(prefs.schedules)
     .map((language) => {
       const schedule = prefs.schedules[language];
       const mine = drills.filter((d) => d.language === language);
@@ -55,6 +42,42 @@ export function DrillToday({ uid }: { uid: string }) {
       (a, b) =>
         Number(b.availability.due) - Number(a.availability.due) || languageLabel(a.language).localeCompare(languageLabel(b.language)),
     );
+}
+
+/** The library's list of drill sessions: which languages are due now and when the others come up. */
+export function DrillToday({ uid }: { uid: string }) {
+  const prefs = useDrillPrefs(uid);
+  const drills = useDrills(uid);
+  const sessions = useRecentSessions(uid);
+  const now = useNow();
+  const rows = prefs && drills && sessions ? buildRows(prefs, drills, sessions, now) : undefined;
+
+  // While the library is open, make the English for the next sessions (due languages first) so
+  // they start at once. Leaving the page stops it.
+  const voice = drillVoice(prefs);
+  const toPrepare = (rows ?? [])
+    .filter((r) => r.excerpts > 0)
+    .map((r) => r.language)
+    .join(",");
+  useEffect(() => {
+    if (!toPrepare) return;
+    let cancelled = false;
+    const t = window.setTimeout(() => void prefetchDrillEnglish(uid, toPrepare.split(","), voice, () => cancelled), 2000);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [uid, toPrepare, voice]);
+
+  if (!rows) return null;
+  if (rows.length === 0) {
+    return (
+      <p className="drill-intro small muted">
+        <b>Drill</b>: learn to say passages of an episode from their English, on a schedule for each language.{" "}
+        <Link to="/drill/settings">Set up ›</Link>
+      </p>
+    );
+  }
 
   return (
     <section className="drill-today">

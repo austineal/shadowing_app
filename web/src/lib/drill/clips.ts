@@ -1,9 +1,9 @@
-import { synthesize } from "../tts/client";
+import { englishClip } from "../tts/clipCache";
 
 /**
- * Synthesises each text in turn with an on-device voice, before a session starts, so nothing
- * has to be generated while the screen may be off. Texts that fail are left out; the player
- * leaves a short pause in their place.
+ * Gets every text's English clip before a session starts, from those stored on this device where
+ * possible and otherwise synthesising (and storing) them, so nothing has to be generated while
+ * the screen may be off. Texts that fail are left out; the player leaves a short pause instead.
  */
 export async function synthesizeAll(
   voiceId: string,
@@ -16,7 +16,7 @@ export async function synthesizeAll(
   for (const text of texts) {
     if (cancelled()) break;
     try {
-      clips.set(text, await synthesize(voiceId, text));
+      clips.set(text, await englishClip(voiceId, text));
     } catch {
       /* left out */
     }

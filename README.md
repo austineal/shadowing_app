@@ -150,6 +150,14 @@ unaffected.
   after a longer gap than planned moves it up to the level that gap matches.
 - **Screen off.** The English is synthesised on the device before a session starts,
   and the session plays through the same background graph as practice.
+- **English clips are kept** in Cache Storage (`tts-clips`, 16-bit audio) and made
+  ahead while the library is open: each scheduled language's next session is planned
+  and any English not yet stored is synthesised, so sessions start at once and work
+  offline. This stops when you leave the library, so it never delays English you need
+  right away. Clips unused for 60 days are deleted, and so are the least recently
+  used once the store passes 150 MB; they're made again when needed. Drills have their
+  own English voice, and **Drill schedules** shows how much space the clips take, with
+  a Clear button.
 
 Data: `users/{uid}/drills/{id}` holds an excerpt and its passages (time ranges, so
 phrase edits don't orphan them, with each passage's level and due date);

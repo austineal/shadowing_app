@@ -215,6 +215,8 @@ export interface DrillSchedule {
 
 export interface DrillPrefs {
   schedules: Record<string, DrillSchedule>;
+  /** Piper voice that reads drills' English cues. Absent: the practice player's default voice. */
+  voice?: string;
 }
 
 /** One drill session, at users/{uid}/drillSessions/{id}. */
