@@ -91,7 +91,9 @@ export function ExcerptPicker(props: {
     opts,
     now,
   );
-  const overlap = props.existing.find((d) => d.start < end && start < d.end);
+  // Not while adding: the new excerpt reaches the live list (from the local cache) before the write
+  // returns, and would count as overlapping itself.
+  const overlap = busy ? undefined : props.existing.find((d) => d.start < end && start < d.end);
   const level = levels[language];
 
   const add = async () => {
@@ -116,8 +118,10 @@ export function ExcerptPicker(props: {
         msg += ` ${languageLabel(language)} drills are now scheduled every day for 20 minutes; change that under Drill schedules in the library.`;
       }
       try {
-        await prepareDrillStudy({ episodeId: episode.id, language, start, end });
-        msg += " Its translations are being prepared too, which takes a minute or two.";
+        const { missing } = await prepareDrillStudy({ episodeId: episode.id, language, start, end });
+        msg += missing
+          ? " Its translations are being prepared too, which takes a minute or two."
+          : " Its translations are already there.";
       } catch (e) {
         msg += ` The translations couldn't be requested (${message(e)}); a drill session will offer to try again.`;
       }
