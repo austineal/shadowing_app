@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { phraseBefore, phrasesIn, splitPassages } from "./passages";
+import { phraseBefore, phraseSpan, phrasesIn, splitPassages } from "./passages";
 
 /** Phrases of `sec` seconds separated by `gap`-second pauses, optionally overridden per index. */
 function phrases(count: number, sec = 7, gap = 0.3, pauses: Record<number, number> = {}) {
@@ -66,5 +66,14 @@ describe("phraseBefore", () => {
     const ps = phrases(5);
     expect(phraseBefore(ps, ps[2].start)).toBe(ps[1]);
     expect(phraseBefore(ps, ps[0].start)).toBeUndefined();
+  });
+});
+
+describe("phraseSpan", () => {
+  it("finds the phrases inside a time range by their midpoints", () => {
+    const ps = phrases(5); // starts at 100, 107.3, 114.6, ...
+    expect(phraseSpan(ps, ps[1].start, ps[3].end)).toEqual({ first: 1, last: 3 });
+    expect(phraseSpan(ps, ps[1].start + 4, ps[3].end)).toEqual({ first: 2, last: 3 });
+    expect(phraseSpan(ps, 0, 50)).toBeNull();
   });
 });

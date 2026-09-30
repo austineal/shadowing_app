@@ -151,6 +151,7 @@ class Recorder {
     } else {
       passages[i] = learnedPassage(passages[i], now);
       next = { ...d, passages, learning: null };
+      add.learnedSeconds = Math.round(passages[i].end - passages[i].start);
       this.tally.learnedPassages++;
     }
     this.drills.set(d.id, next);
@@ -312,12 +313,12 @@ function SessionView({ uid, language, prepared }: { uid: string; language: strin
       navigator.mediaSession.metadata = new MediaMetadata({
         title: cur.step.text ?? cur.step.english ?? CUE_LABEL[cur.step.cue],
         artist: CUE_LABEL[cur.step.cue],
-        album: title,
+        album: cur.block.passageTitle ? `${cur.block.title}: ${cur.block.passageTitle}` : cur.block.title,
       });
     } catch {
       /* unsupported */
     }
-  }, [cur, started, title]);
+  }, [cur, started]);
   useEffect(() => {
     if (!("mediaSession" in navigator)) return;
     try {
@@ -384,6 +385,7 @@ function SessionView({ uid, language, prepared }: { uid: string; language: strin
             <div className="drill-block small muted">
               {cur.block.kind === "review" ? "Review" : "Learning"} · {cur.block.title} · passage {cur.block.passage + 1} of{" "}
               {cur.block.passageCount}
+              {cur.block.passageTitle && <div className="drill-passage-title">{cur.block.passageTitle}</div>}
             </div>
             <div className={`drill-cue cue-${cur.step.cue}`}>{CUE_LABEL[cur.step.cue]}</div>
             <div className="drill-english">{cur.step.english ?? ""}</div>
@@ -445,7 +447,8 @@ function SessionView({ uid, language, prepared }: { uid: string; language: strin
             )}
             {learning.map((b) => (
               <li key={`${b.drillId}-${b.passage}`}>
-                Learn {b.title}, passage {b.passage + 1} of {b.passageCount}
+                Learn {b.passageTitle ? `“${b.passageTitle}” from ` : ""}
+                {b.title}, passage {b.passage + 1} of {b.passageCount}
                 <span className="muted">
                   {b.from === b.to ? " (run-through only)" : ` (phrases ${b.from + 1}–${b.to}${b.wrapUp ? " and run-through" : ""})`}
                 </span>

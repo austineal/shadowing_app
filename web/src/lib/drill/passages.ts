@@ -24,6 +24,19 @@ export function phrasesIn<T extends Timed>(phrases: T[], start: number, end: num
   return phrases.filter((p) => mid(p) >= start && mid(p) < end);
 }
 
+/** Indices of the first and last phrases whose midpoints lie within [start, end], or null if none do. */
+export function phraseSpan(phrases: Timed[], start: number, end: number): { first: number; last: number } | null {
+  let first = -1;
+  let last = -1;
+  phrases.forEach((p, i) => {
+    if (mid(p) >= start && mid(p) <= end) {
+      if (first < 0) first = i;
+      last = i;
+    }
+  });
+  return first < 0 ? null : { first, last };
+}
+
 /** The phrase just before `time` (the last one whose midpoint is earlier), if any. */
 export function phraseBefore<T extends Timed>(phrases: T[], time: number): T | undefined {
   let found: T | undefined;

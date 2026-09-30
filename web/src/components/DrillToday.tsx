@@ -14,6 +14,8 @@ interface Row {
   due: number;
   learning?: Drill;
   excerpts: number;
+  /** The most recently chosen excerpt, whose episode is where the next one most likely comes from. */
+  latest?: Drill;
 }
 
 /** The library's list of drill sessions: which languages are due now and when the others come up. */
@@ -46,6 +48,7 @@ export function DrillToday({ uid }: { uid: string }) {
         due: mine.reduce((n, d) => n + d.passages.filter((p) => isDue(p, now)).length, 0),
         learning: schedule.newMaterial ? learningDrill(mine.map((drill) => ({ drill })))?.drill : undefined,
         excerpts: mine.length,
+        latest: mine.reduce<Drill | undefined>((a, d) => (!a || d.createdAt > a.createdAt ? d : a), undefined),
       };
     })
     .sort(
@@ -75,7 +78,7 @@ function TodayRow({ row, now }: { row: Row; now: number }) {
   const detail =
     row.excerpts === 0
       ? "No excerpt yet: open an episode and tap Drill"
-      : [due ? `${due} ${due === 1 ? "passage" : "passages"} to review` : "", learning ? `learning ${learning.episodeTitle}` : ""]
+      : [due ? `${due} ${due === 1 ? "passage" : "passages"} to review` : "", learning ? `learning ${learning.title ?? learning.episodeTitle}` : ""]
           .filter(Boolean)
           .join(" · ") || "All caught up";
   const perDay = schedule.everyDays <= 1 && schedule.perDay > 1;
@@ -91,6 +94,11 @@ function TodayRow({ row, now }: { row: Row; now: number }) {
           </span>
         </div>
         <div className="meta">{detail}</div>
+        {row.latest && !learning && schedule.newMaterial && (
+          <Link to={`/episode/${row.latest.episodeId}?drill=suggest`} className="small">
+            Choose the next excerpt ›
+          </Link>
+        )}
       </div>
       {work &&
         (a.due ? (

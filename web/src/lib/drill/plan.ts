@@ -62,7 +62,8 @@ function base(d: PlanDrill, i: number) {
   return {
     drillId: d.drill.id,
     episodeId: d.drill.episodeId,
-    title: d.drill.episodeTitle,
+    title: d.drill.title ?? d.drill.episodeTitle,
+    passageTitle: d.drill.passages[i].title,
     passage: i,
     passageCount: d.drill.passages.length,
     phrases: passagePhrases(d, i),
