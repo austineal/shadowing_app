@@ -52,6 +52,11 @@ describe("weeklyPace", () => {
     expect(excerptMinutes(french)).toBeLessThanOrEqual(4);
   });
 
+  it("doesn't count sessions abandoned before anything was done", () => {
+    const abandoned = { ...log(20, 0), progress: 0 };
+    expect(weeklyPace(schedule({}), [abandoned, log(3, 300)], full, now).measured).toBe(false);
+  });
+
   it("measures from the logs once they go back two weeks", () => {
     const logs = [log(21, 300), log(14, 300), log(3, 300), log(1)];
     const pace = weeklyPace(schedule({}), logs, full, now);

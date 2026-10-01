@@ -1,20 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { useDrillPlayer, type DrillAudioOptions } from "../hooks/useDrillPlayer";
+import { playedSeconds, useDrillPlayer, type DrillAudioOptions } from "../hooks/useDrillPlayer";
 import { useNow } from "../hooks/useDrills";
 import { synthesizeAll } from "../lib/drill/clips";
-import { CUE_LABEL, formatMinutes, formatNext } from "../lib/drill/labels";
+import { bookedByDay, spreadReviews } from "../lib/drill/forecast";
+import { CUE_LABEL, REVIEW_LABEL, formatDay, formatMinutes, formatNext } from "../lib/drill/labels";
 import { frontier } from "../lib/drill/plan";
 import { prefetchDrillEnglish } from "../lib/drill/prefetch";
 import { prepareSession, type Prepared } from "../lib/drill/prepare";
 import { DrillSession, type SessionEvent } from "../lib/drill/session";
 import { learnedPassage, reviewedPassage } from "../lib/drill/srs";
-import type { SessionPhrase } from "../lib/drill/steps";
+import { cueSize, type DrillOptions, type SessionPhrase } from "../lib/drill/steps";
 import { prepareDrillStudy, saveDrillProgress, startSessionLog, updateSessionLog } from "../lib/drill/store";
 import { formatTime } from "../lib/format";
 import { languageLabel } from "../lib/languages";
 import { isVoiceStored, loadVoice } from "../lib/tts/client";
-import type { Drill, DrillSessionLog } from "../types";
+import type { Drill, DrillSchedule, DrillSessionLog } from "../types";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -24,15 +25,20 @@ type Tally = Pick<DrillSessionLog, "reviewed" | "passed" | "learnedPhrases"> & {
 class Recorder {
   readonly tally: Tally = { reviewed: 0, passed: 0, learnedPhrases: 0, learnedPassages: 0 };
   private logId: string | null = null;
+  /** All the language's excerpts, as they stand. */
   private readonly drills: Map<string, Drill>;
   private readonly uid: string;
   private readonly language: string;
+  private readonly schedule: DrillSchedule;
+  private readonly opts: DrillOptions;
   private readonly onTally: (t: Tally) => void;
 
-  constructor(uid: string, language: string, drills: Drill[], onTally: (t: Tally) => void) {
+  constructor(uid: string, language: string, prepared: Prepared, onTally: (t: Tally) => void) {
     this.uid = uid;
     this.language = language;
-    this.drills = new Map(drills.map((d) => [d.id, d]));
+    this.drills = new Map(prepared.drills.map((d) => [d.id, d]));
+    this.schedule = prepared.schedule;
+    this.opts = prepared.opts;
     this.onTally = onTally;
   }
 
@@ -54,7 +60,11 @@ class Recorder {
     let next: Drill;
     const add: Partial<DrillSessionLog> = { progress: 1 };
     if (e.kind === "reviewed") {
-      passages[i] = reviewedPassage(passages[i], e.passed, now);
+      // A long gap's next review may move a day or more onto a lighter one.
+      const others = [...this.drills.values()].flatMap((x) => x.passages.filter((_, j) => x.id !== d.id || j !== i));
+      const booked = bookedByDay(others, this.schedule, now, this.opts);
+      const spread = spreadReviews(booked, this.schedule, passages[i].end - passages[i].start, this.opts);
+      passages[i] = reviewedPassage(passages[i], e.passed, now, spread);
       next = { ...d, passages };
       add.reviewed = 1;
       add.passed = e.passed ? 1 : 0;
@@ -99,16 +109,18 @@ export default function DrillSessionPage({ uid }: { uid: string }) {
 function SessionLoader({ uid, language }: { uid: string; language: string }) {
   const [prepared, setPrepared] = useState<Prepared>();
   const [error, setError] = useState<string>();
+  /** Start a new passage even though its reviews won't fit in the coming week. */
+  const [learnAnyway, setLearnAnyway] = useState(false);
   useEffect(() => {
     let cancelled = false;
-    prepareSession(uid, language, Date.now()).then(
+    prepareSession(uid, language, Date.now(), { learnAnyway }).then(
       (p) => !cancelled && setPrepared(p),
       (e) => !cancelled && setError(message(e)),
     );
     return () => {
       cancelled = true;
     };
-  }, [uid, language]);
+  }, [uid, language, learnAnyway]);
 
   const title = `${languageLabel(language)} drill`;
   if (error) {
@@ -128,7 +140,35 @@ function SessionLoader({ uid, language }: { uid: string; language: string }) {
       </Shell>
     );
   }
-  return <SessionView uid={uid} language={language} prepared={prepared} />;
+  return (
+    <SessionView
+      key={String(learnAnyway)}
+      uid={uid}
+      language={language}
+      prepared={prepared}
+      onLearnAnyway={() => {
+        setPrepared(undefined);
+        setLearnAnyway(true);
+      }}
+    />
+  );
+}
+
+/** Why the plan has no new passage, when its reviews wouldn't fit (see planSession), with a way past it. */
+function HeldBack({ prepared, now, onLearnAnyway }: { prepared: Prepared; now: number; onLearnAnyway: () => void }) {
+  const day = prepared.plan.heldBack;
+  if (!day) return null;
+  const when = formatDay(day.day, now);
+  return (
+    <div className="drill-notice small">
+      New passages are on hold: one more would overfill {when === "today" ? "today's later" : `${when}'s`}{" "}
+      {day.sessions > 1 ? "sessions" : "session"}, which already {day.sessions > 1 ? "have" : "has"} about{" "}
+      {formatMinutes(day.reviewSec)} of reviews in {formatMinutes(day.capacitySec)}.{" "}
+      <button className="btn small" onClick={onLearnAnyway}>
+        Learn one anyway
+      </button>
+    </div>
+  );
 }
 
 /** The phrase of a span playing at time `t`. */
@@ -138,7 +178,8 @@ function phraseAt(phrases: SessionPhrase[], t: number): SessionPhrase {
   return found;
 }
 
-function SessionView({ uid, language, prepared }: { uid: string; language: string; prepared: Prepared }) {
+function SessionView(props: { uid: string; language: string; prepared: Prepared; onLearnAnyway: () => void }) {
+  const { uid, language, prepared } = props;
   const { plan, opts } = prepared;
   const title = `${languageLabel(language)} drill`;
   const voiceId = prepared.voice;
@@ -149,8 +190,7 @@ function SessionView({ uid, language, prepared }: { uid: string; language: strin
   const [made, setMade] = useState(0);
   const [note, setNote] = useState<string>();
   const [tally, setTally] = useState<Tally>({ reviewed: 0, passed: 0, learnedPhrases: 0, learnedPassages: 0 });
-  const [recorder] = useState(() => new Recorder(uid, language, prepared.drills, setTally));
-  const [startedAt, setStartedAt] = useState<number>();
+  const [recorder] = useState(() => new Recorder(uid, language, prepared, setTally));
 
   useEffect(() => {
     if (!needsVoice) return;
@@ -212,7 +252,6 @@ function SessionView({ uid, language, prepared }: { uid: string; language: strin
 
   const start = () => {
     recorder.start();
-    setStartedAt((t) => t ?? Date.now());
     player.play();
   };
 
@@ -290,7 +329,7 @@ function SessionView({ uid, language, prepared }: { uid: string; language: strin
           <h1>{title}</h1>
           {plan.blocks.length > 0 && <div className="sub">About {formatMinutes(plan.seconds)}</div>}
         </div>
-        {startedAt !== undefined && <span className="small muted">{formatTime((now - startedAt) / 1000)}</span>}
+        {started && <span className="small muted">{formatTime(playedSeconds(player.clock, now))}</span>}
       </header>
 
       {player.state === "finished" ? (
@@ -316,7 +355,8 @@ function SessionView({ uid, language, prepared }: { uid: string; language: strin
               </div>
             )}
             <div className="drill-block small muted">
-              {cur.block.kind === "review" ? "Review" : "Learning"} · {cur.block.title} · passage {cur.block.passage + 1} of{" "}
+              {cur.block.kind === "review" ? REVIEW_LABEL[cueSize(cur.block.level)] : "Learning"} · {cur.block.title} · passage{" "}
+              {cur.block.passage + 1} of{" "}
               {cur.block.passageCount}
               {cur.block.passageTitle && <div className="drill-passage-title">{cur.block.passageTitle}</div>}
             </div>
@@ -365,6 +405,7 @@ function SessionView({ uid, language, prepared }: { uid: string; language: strin
                 : ""}
             </p>
           )}
+          <HeldBack prepared={prepared} now={now} onLearnAnyway={props.onLearnAnyway} />
           <Link to="/" className="btn" style={{ marginTop: 14 }}>
             Back to the library
           </Link>
@@ -389,6 +430,7 @@ function SessionView({ uid, language, prepared }: { uid: string; language: strin
             ))}
           </ul>
 
+          <HeldBack prepared={prepared} now={now} onLearnAnyway={props.onLearnAnyway} />
           {prepared.untranslated > 0 && (
             <div className="drill-notice small">
               {prepared.untranslated} {prepared.untranslated === 1 ? "phrase has" : "phrases have"} no English yet, so{" "}

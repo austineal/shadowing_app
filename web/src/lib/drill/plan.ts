@@ -4,7 +4,8 @@
  * material only starts once every due review fits, and learning can stop partway through a
  * passage and pick up next session, so sessions don't end early.
  */
-import type { Drill } from "../../types";
+import type { Drill, DrillPassage } from "../../types";
+import { bookNewPassage, forecastLoad, overfilledBy, type LoadDay, type SessionDay } from "./forecast";
 import { phraseBefore, phrasesIn } from "./passages";
 import {
   blockSeconds,
@@ -15,7 +16,7 @@ import {
   type LearnBlock,
   type ReviewBlock,
 } from "./session";
-import { isDue, isLearned, overdueRatio } from "./srs";
+import { isDue, isLearned, overdueRatio, reviewedPassage } from "./srs";
 import type { DrillOptions, SessionPhrase } from "./steps";
 
 export interface PlanDrill {
@@ -30,6 +31,11 @@ export interface PlanInput {
   newMaterial: boolean;
   opts: DrillOptions;
   drills: PlanDrill[];
+  /**
+   * The language's session days after this one (see sessionDays). Given these, a new passage only
+   * starts if its reviews will fit in them over the coming week.
+   */
+  upcoming?: SessionDay[];
 }
 
 export interface SessionPlan {
@@ -39,6 +45,8 @@ export interface SessionPlan {
   /** Passages due for review, and how many of them were left for a later session. */
   due: number;
   deferred: number;
+  /** Set when a new passage was held back: the session day its reviews wouldn't have fitted in. */
+  heldBack?: LoadDay;
 }
 
 export const passagePhrases = (d: PlanDrill, i: number) =>
@@ -110,13 +118,40 @@ export function planSession(input: PlanInput): SessionPlan {
   seconds = blocks.reduce((sum, b) => sum + blockSeconds(b, opts), 0);
 
   const learner = input.newMaterial && picked.length === due.length ? learningDrill(input.drills) : undefined;
-  if (learner) seconds += planLearning(learner, blocks, budgetSec - seconds, opts);
+  let heldBack: LoadDay | undefined;
+  if (learner) {
+    // The reviews booked once this session's are done, to check new passages against.
+    const load = input.upcoming && forecastLoad(passagesAfter(input.drills, blocks, now), input.upcoming, now, opts);
+    const learned = planLearning(learner, blocks, budgetSec - seconds, opts, now, load);
+    seconds += learned.used;
+    heldBack = learned.heldBack;
+  }
 
-  return { blocks, seconds, due: due.length, deferred: due.length - picked.length };
+  return { blocks, seconds, due: due.length, deferred: due.length - picked.length, ...(heldBack ? { heldBack } : {}) };
 }
 
-/** Adds learning blocks for `d` that fit in `budget` seconds; returns the time they take. */
-function planLearning(d: PlanDrill, blocks: Block[], budget: number, opts: DrillOptions): number {
+/** Every passage as it will be once the planned reviews have passed. */
+function passagesAfter(drills: PlanDrill[], blocks: Block[], now: number): DrillPassage[] {
+  return drills.flatMap((d) =>
+    d.drill.passages.map((p, i) =>
+      blocks.some((b) => b.kind === "review" && b.drillId === d.drill.id && b.passage === i) ? reviewedPassage(p, true, now) : p,
+    ),
+  );
+}
+
+/**
+ * Adds learning blocks for `d` that fit in `budget` seconds; returns the time they take. With a
+ * `load`, a passage is only started if its reviews will fit (see overfilledBy), and is then booked
+ * into it; otherwise learning stops there and `heldBack` says where it wouldn't fit.
+ */
+function planLearning(
+  d: PlanDrill,
+  blocks: Block[],
+  budget: number,
+  opts: DrillOptions,
+  now: number,
+  load?: LoadDay[],
+): { used: number; heldBack?: LoadDay } {
   let used = 0;
   let i = frontier(d.drill);
   let from = d.drill.learning?.passage === i ? d.drill.learning.phrases : 0;
@@ -150,13 +185,19 @@ function planLearning(d: PlanDrill, blocks: Block[], budget: number, opts: Drill
       }
     }
     if (to === block.from && !wrapUp) break;
+    if (load && block.from === 0) {
+      const audioSec = d.drill.passages[i].end - d.drill.passages[i].start;
+      const full = overfilledBy(load, audioSec, now, opts);
+      if (full) return { used, heldBack: full };
+      bookNewPassage(load, audioSec, now, opts);
+    }
     blocks.push({ ...block, to, wrapUp });
     used += sec;
     if (!wrapUp) break;
     i++;
     from = 0;
   }
-  return used;
+  return { used };
 }
 
 /** Rough time to learn passages from scratch, before any English exists (it's guessed from the audio length). */

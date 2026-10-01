@@ -1,6 +1,6 @@
 import type { DrillSchedule } from "../../types";
-import type { Cue } from "./steps";
-import { dayNumber } from "./srs";
+import type { Cue, CueSize } from "./steps";
+import { dayNumber, dayStart } from "./srs";
 
 /** The rhythms offered for a language. */
 export const FREQUENCIES = [
@@ -33,6 +33,25 @@ export const CUE_LABEL: Record<Cue, string> = {
   repeat: "Repeat",
   shadow: "Shadow along",
 };
+
+/** What a review cues at once, for the session screen. */
+export const REVIEW_LABEL: Record<CueSize, string> = {
+  phrase: "Review",
+  sentence: "Review by sentence",
+  turn: "Review in longer stretches",
+};
+
+/** A review day: "today", "tomorrow", "Thursday", "next Thursday" or a date. */
+export function formatDay(day: number, now: number): string {
+  const ahead = day - dayNumber(now);
+  if (ahead <= 0) return "today";
+  if (ahead === 1) return "tomorrow";
+  const d = new Date(dayStart(day));
+  const weekday = d.toLocaleDateString(undefined, { weekday: "long" });
+  if (ahead < 7) return weekday;
+  if (ahead < 14) return `next ${weekday}`;
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
 
 /** When the next session is: "after 17:20" (later today), "tomorrow", "on Thursday" or a date. */
 export function formatNext(next: number, now: number): string {

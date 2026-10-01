@@ -5,12 +5,13 @@
  * behind the drill design found).
  */
 import type { DrillSchedule, DrillSessionLog } from "../../types";
+import { REVIEW_SHARE } from "./forecast";
 import { learningSeconds } from "./plan";
 import { DAY_MS } from "./srs";
 import type { DrillOptions, SessionPhrase } from "./steps";
 
 /** Share of session time that goes to new material once reviews have built up. */
-const NEW_SHARE = 0.45;
+const NEW_SHARE = 1 - REVIEW_SHARE;
 /** How far back a measured pace looks. */
 const WINDOW_DAYS = 28;
 /** A measured pace is used once the logs go back this far. */
@@ -34,10 +35,13 @@ export function drillMinutesPerAudioMinute(opts: DrillOptions): number {
   return learningSeconds([phrases], opts) / (phrases[5].end - phrases[0].start);
 }
 
-/** The pace for a language, from its schedule and its session logs (any age; older ones are ignored). */
+/**
+ * The pace for a language, from its schedule and its session logs (any age; older ones are
+ * ignored, and so are sessions abandoned before anything was done).
+ */
 export function weeklyPace(schedule: DrillSchedule, logs: DrillSessionLog[], opts: DrillOptions, now: number): Pace {
   const estimate = (sessionsPerWeek(schedule) * schedule.minutes * 60 * NEW_SHARE) / drillMinutesPerAudioMinute(opts);
-  const recorded = logs.filter((l) => typeof l.learnedSeconds === "number" && l.startedAt <= now);
+  const recorded = logs.filter((l) => typeof l.learnedSeconds === "number" && l.progress > 0 && l.startedAt <= now);
   const history = recorded.length ? (now - Math.min(...recorded.map((l) => l.startedAt))) / DAY_MS : 0;
   if (history < MIN_HISTORY_DAYS) return { perWeek: estimate, measured: false };
   const days = Math.min(history, WINDOW_DAYS);

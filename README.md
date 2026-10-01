@@ -138,16 +138,36 @@ unaffected.
   shows which are due. A session reviews due passages first (most overdue first, then
   in story order, each led in by the phrase before it), then learns new passages of the
   current excerpt with the time left, stopping partway through a passage if need be
-  and resuming next time.
+  and resuming next time. The session clock counts only time spent playing.
 - **Learning** a phrase: its English, listen and repeat, a first try from the English,
   then joined to the phrase before. A passage finishes with every phrase from its
   English and a straight run-through to shadow.
-- **Reviews and grading.** Each phrase is tested cold: English, a pause to say it
-  (shorter as the passage matures), then the original. Press **Missed** (or ⏮ on the
-  lock screen or headset) if you couldn't; that jumps to the answer and adds a fix-up
-  round. A passage passes with at most one miss and moves up a level (next review
-  after 1, 3, 7, 15, 30, 60, 120, then 240 days); a fail moves it down one. Passing
-  after a longer gap than planned moves it up to the level that gap matches.
+- **Reviews and grading.** Each cue is tested cold: English, a pause to say it
+  (shorter as the passage matures), then the original. Cues grow as a passage
+  matures: a phrase at a time at first, whole sentences from level 2 (a three-day
+  gap; a sentence over 15 seconds is cued in parts), and runs of sentences of up to
+  20 seconds from level 4 (two weeks; a pause of over a second ends a run). Press
+  **Missed** (or ⏮ on the lock screen or headset) if you couldn't; that jumps to the
+  answer and adds a fix-up round (for a cue of several phrases, each phrase heard and
+  repeated once, then the whole cue again). A passage passes with at most one missed
+  cue (none if it has three cues or fewer) and moves up a level (next review after 1,
+  3, 7, 15, 30, 60, 120, then 240 days); a fail moves it down one. Passing after a
+  longer gap than planned moves it up to the level that gap matches.
+- **Load ahead.** **Drill schedules** shows each language's reviews over the next two
+  weeks, if they all go well, against the time its sessions have (estimated from each
+  passage's audio length). A session only starts a new passage if that passage's
+  reviews (at the next session, a day later, then three days after that) would still
+  fit in the coming week's sessions; otherwise the session screen says which day is
+  full and offers **Learn one anyway**. A review whose next gap is a week or more can
+  move by about a tenth of the gap to the lightest nearby day, but only when its
+  planned day would otherwise have more than about half its session time in reviews,
+  so neighbouring passages usually keep coming up together.
+- **Progress map.** The library's **Drills** box and **Drill schedules** show each
+  excerpt as a strip of its passages: being learned, just learned (level 0–1),
+  growing (2–3) or solid (4 and up: still known after a week away), with due ones
+  underlined. In the episode's transcript the excerpt's phrases are coloured the same
+  way, each passage is headed by its title and stage, and a line marks how far it's
+  learned.
 - **Screen off.** The English is synthesised on the device before a session starts,
   and the session plays through the same background graph as practice.
 - **English clips are kept** in Cache Storage (`tts-clips`, 16-bit audio) and made

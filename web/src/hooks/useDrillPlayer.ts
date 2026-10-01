@@ -8,6 +8,18 @@ export type DrillPlayerState = "idle" | "playing" | "paused" | "finished";
 /** A press the player confirmed, for the screen to show: Missed (with the phrases marked) or Skip. `id` counts presses. */
 export type PlayerAction = { id: number } & ({ kind: "missed"; text: string; late: boolean } | { kind: "skip" });
 
+/** Time the session has spent playing: earlier stretches, plus the current one if it's playing. */
+export interface PlayClock {
+  playedMs: number;
+  /** When the current stretch of playing began; absent while paused. */
+  since?: number;
+}
+
+/** The session's playing time at `now`, which stands still while paused. */
+export function playedSeconds(clock: PlayClock, now: number): number {
+  return (clock.playedMs + (clock.since === undefined ? 0 : Math.max(0, now - clock.since))) / 1000;
+}
+
 export interface DrillAudioOptions {
   /** Audio URL of each episode the session plays from. */
   sources: Record<string, string>;
@@ -23,6 +35,7 @@ interface Listener {
   state: (s: DrillPlayerState) => void;
   error: (message: string | undefined) => void;
   action: (a: PlayerAction) => void;
+  clock: (c: PlayClock) => void;
 }
 
 interface Source {
@@ -45,6 +58,7 @@ class DrillAudio {
   private raf = 0;
   private playing = false;
   private presses = 0;
+  private clock: PlayClock = { playedMs: 0 };
   private readonly session: DrillSession;
   private readonly opts: DrillAudioOptions;
   private readonly on: Listener;
@@ -64,6 +78,7 @@ class DrillAudio {
   async play() {
     if (this.playing || this.session.finished) return;
     this.playing = true;
+    this.setClock({ playedMs: this.clock.playedMs, since: Date.now() });
     this.on.state("playing");
     this.on.error(undefined);
     await this.startGraph();
@@ -75,6 +90,7 @@ class DrillAudio {
   pause() {
     if (!this.playing) return;
     this.playing = false;
+    this.stopClock();
     this.stopStep();
     this.graph?.out.pause();
     this.on.state("paused");
@@ -143,6 +159,7 @@ class DrillAudio {
 
   destroy() {
     this.playing = false;
+    this.stopClock();
     this.stopStep();
     for (const s of this.sources.values()) {
       s.el.pause();
@@ -169,6 +186,17 @@ class DrillAudio {
     }
   }
 
+  private setClock(c: PlayClock) {
+    this.clock = c;
+    this.on.clock(c);
+  }
+
+  /** Banks the current stretch of playing time. */
+  private stopClock() {
+    const { playedMs, since } = this.clock;
+    if (since !== undefined) this.setClock({ playedMs: playedMs + Math.max(0, Date.now() - since) });
+  }
+
   private stopStep() {
     cancelAnimationFrame(this.raf);
     this.cancelStep();
@@ -181,6 +209,7 @@ class DrillAudio {
     this.on.step(cur);
     if (!cur) {
       this.playing = false;
+      this.stopClock();
       this.graph?.out.pause();
       this.on.state("finished");
       return;
@@ -373,6 +402,7 @@ export function useDrillPlayer(session: DrillSession | null, opts: DrillAudioOpt
   const [position, setPosition] = useState(0);
   const [error, setError] = useState<string>();
   const [action, setAction] = useState<PlayerAction>();
+  const [clock, setClock] = useState<PlayClock>({ playedMs: 0 });
 
   const audio = useMemo(
     () =>
@@ -383,6 +413,7 @@ export function useDrillPlayer(session: DrillSession | null, opts: DrillAudioOpt
             state: setState,
             error: setError,
             action: setAction,
+            clock: setClock,
           })
         : null,
     [session, opts],
@@ -408,6 +439,8 @@ export function useDrillPlayer(session: DrillSession | null, opts: DrillAudioOpt
     error,
     /** The last press confirmed, for about two seconds. */
     action,
+    /** Time spent playing so far (see playedSeconds). */
+    clock,
     canMiss: session?.canMiss() ?? false,
     play: useCallback(() => void audio?.play(), [audio]),
     pause: useCallback(() => audio?.pause(), [audio]),

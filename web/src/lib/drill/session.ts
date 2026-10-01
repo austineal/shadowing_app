@@ -6,6 +6,8 @@
  */
 import { reviewPasses } from "./srs";
 import {
+  cueGroups,
+  cueSize,
   hasEnglish,
   leadInSteps,
   learnSteps,
@@ -36,7 +38,7 @@ interface BlockBase {
 
 export interface ReviewBlock extends BlockBase {
   kind: "review";
-  /** The passage's level, which sets how long the learner gets to answer. */
+  /** The passage's level, which sets how long the learner gets to answer and how much each cue covers. */
   level: number;
 }
 
@@ -64,6 +66,7 @@ export interface Unit {
 }
 
 export type SessionEvent =
+  /** `misses` counts the graded cues missed (a cue may cover several phrases). */
   | { kind: "reviewed"; block: ReviewBlock; misses: number; passed: boolean }
   | { kind: "learning"; block: LearnBlock; phrases: number }
   | { kind: "learned"; block: LearnBlock };
@@ -80,13 +83,20 @@ function testUnit(block: Block, idx: number[], graded: boolean, opts: DrillOptio
   return { kind: "test", steps: testSteps(block.episodeId, ps, levelOf(block), opts), test: { phrases: idx, graded, attempt: 0 } };
 }
 
-/** After a miss: listen and repeat again, then retry the test (ungraded). */
+/**
+ * After a miss: listen and repeat again, then retry the test (ungraded). A review cue of a sentence
+ * or more is too long to repeat in one go, so each of its phrases is heard and repeated once.
+ */
 function fixupUnit(block: Block, missed: Unit, opts: DrillOptions): Unit {
   const idx = missed.test!.phrases;
   const ps = idx.map((i) => block.phrases[i]);
+  const repeat =
+    block.kind === "review" && ps.length > 1
+      ? ps.flatMap((p) => repeatSteps(block.episodeId, [p], opts, 1))
+      : repeatSteps(block.episodeId, ps, opts);
   return {
     kind: "fixup",
-    steps: [...repeatSteps(block.episodeId, ps, opts), ...testSteps(block.episodeId, ps, levelOf(block), opts)],
+    steps: [...repeat, ...testSteps(block.episodeId, ps, levelOf(block), opts)],
     test: { phrases: idx, graded: false, attempt: missed.test!.attempt + 1 },
   };
 }
@@ -121,10 +131,11 @@ export function blockUnits(block: Block, opts: DrillOptions): Unit[] {
   const lead = leadInUnit(block);
   if (lead) units.push(lead);
   if (block.kind === "review") {
-    block.phrases.forEach((p, i) => {
+    for (const g of cueGroups(block.phrases, cueSize(block.level))) {
+      const p = block.phrases[g[0]];
       // A phrase without English can't be tested, so it's just heard and repeated.
-      units.push(p.english ? testUnit(block, [i], true, opts) : { kind: "listen", steps: repeatSteps(block.episodeId, [p], opts, 1) });
-    });
+      units.push(p.english ? testUnit(block, g, true, opts) : { kind: "listen", steps: repeatSteps(block.episodeId, [p], opts, 1) });
+    }
     units.push({ kind: "shadow", steps: shadowSteps(block.episodeId, block.phrases) });
     return units;
   }
@@ -179,8 +190,8 @@ export class DrillSession {
   private units: Unit[] = [];
   private unitIndex = 0;
   private stepIndex = 0;
-  /** Graded phrases missed in the current block (each counts once). */
-  private misses = new Set<number>();
+  /** Graded tests missed in the current block. */
+  private misses = 0;
 
   constructor(blocks: Block[], opts: DrillOptions, onEvent: (e: SessionEvent) => void) {
     this.blocks = blocks;
@@ -273,8 +284,8 @@ export class DrillSession {
   }
 
   private mark(unit: Unit) {
+    if (!unit.missed && unit.test!.graded) this.misses++;
     unit.missed = true;
-    if (unit.test!.graded) for (const i of unit.test!.phrases) this.misses.add(i);
   }
 
   private enterBlock(i: number) {
@@ -282,7 +293,7 @@ export class DrillSession {
     this.units = i < this.blocks.length ? blockUnits(this.blocks[i], this.opts) : [];
     this.unitIndex = 0;
     this.stepIndex = 0;
-    this.misses = new Set();
+    this.misses = 0;
     if (i < this.blocks.length && this.units.length === 0) this.enterBlock(i + 1);
   }
 
@@ -297,9 +308,8 @@ export class DrillSession {
     if (this.unitIndex < this.units.length) return;
 
     if (block.kind === "review") {
-      const tested = block.phrases.filter((p) => !!p.english).length;
-      const misses = this.misses.size;
-      this.onEvent({ kind: "reviewed", block, misses, passed: reviewPasses(misses, tested) });
+      const tests = this.units.filter((u) => u.test?.graded).length;
+      this.onEvent({ kind: "reviewed", block, misses: this.misses, passed: reviewPasses(this.misses, tests) });
     } else if (block.wrapUp) {
       this.onEvent({ kind: "learned", block });
     }

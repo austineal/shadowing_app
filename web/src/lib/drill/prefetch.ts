@@ -22,7 +22,7 @@ async function run(uid: string, languages: string[], voiceId: string, cancelled:
   let failed = false;
   for (const language of languages) {
     if (cancelled()) return made;
-    const prepared = await prepareSession(uid, language, Date.now(), false).catch(() => undefined);
+    const prepared = await prepareSession(uid, language, Date.now(), { withAudio: false }).catch(() => undefined);
     if (!prepared) failed = true;
     for (const text of prepared?.english ?? []) {
       if (cancelled()) return made;

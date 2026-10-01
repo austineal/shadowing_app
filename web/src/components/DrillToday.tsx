@@ -9,6 +9,7 @@ import { drillVoice } from "../lib/drill/prepare";
 import { isDue } from "../lib/drill/srs";
 import { languageLabel } from "../lib/languages";
 import type { Drill, DrillPrefs, DrillSchedule, DrillSessionLog } from "../types";
+import { PassageMap } from "./PassageMap";
 
 interface Row {
   language: string;
@@ -105,6 +106,8 @@ function TodayRow({ row, now }: { row: Row; now: number }) {
           .filter(Boolean)
           .join(" · ") || "All caught up";
   const perDay = schedule.everyDays <= 1 && schedule.perDay > 1;
+  // The excerpt being learned, else the latest, as a strip of its passages.
+  const shown = learning ?? row.latest;
   return (
     <div className="drill-row">
       <div className="body">
@@ -117,6 +120,11 @@ function TodayRow({ row, now }: { row: Row; now: number }) {
           </span>
         </div>
         <div className="meta">{detail}</div>
+        {shown && (
+          <Link to={`/episode/${shown.episodeId}`} className="today-map" title="Open the excerpt's episode">
+            <PassageMap drill={shown} now={now} />
+          </Link>
+        )}
         {row.latest && !learning && schedule.newMaterial && (
           <Link to={`/episode/${row.latest.episodeId}?drill=suggest`} className="small">
             Choose the next excerpt ›
