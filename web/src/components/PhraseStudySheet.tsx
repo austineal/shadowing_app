@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { highlightSpans, visibleNotes } from "../lib/notes";
-import { clearThread, explainPhrase, type ExplainMode } from "../lib/study";
-import type { PhraseStudy } from "../types";
+import { highlightSpans, isKnownNote, knownMatches, visibleNotes } from "../lib/notes";
+import { clearThread, explainPhrase, markNoteKnown, unmarkKnown, type ExplainMode } from "../lib/study";
+import type { KnownNote, PhraseStudy } from "../types";
 
 const KIND_LABEL: Record<string, string> = {
   grammar: "Grammar",
@@ -13,10 +13,20 @@ const KIND_LABEL: Record<string, string> = {
 };
 
 /** Translation, notes and follow-up questions for one phrase. */
-export function PhraseStudySheet(props: { uid: string; episodeId: string; phrase: PhraseStudy; onClose: () => void }) {
-  const { uid, episodeId, phrase } = props;
-  const notes = visibleNotes(phrase);
-  /** Index of each visible note in phrase.notes, which is what the server refers to. */
+export function PhraseStudySheet(props: {
+  uid: string;
+  episodeId: string;
+  language: string;
+  phrase: PhraseStudy;
+  known: KnownNote[];
+  onClose: () => void;
+}) {
+  const { uid, episodeId, language, phrase, known } = props;
+  const [showKnown, setShowKnown] = useState(false);
+  const all = visibleNotes(phrase);
+  const knownCount = all.filter((n) => isKnownNote(n, known)).length;
+  const notes = showKnown ? all : all.filter((n) => !isKnownNote(n, known));
+  /** Index of each listed note in phrase.notes, which is what the server refers to. */
   const noteIndex = notes.map((n) => phrase.notes.indexOf(n));
   const parts = highlightSpans(phrase.text, notes);
 
@@ -42,6 +52,19 @@ export function PhraseStudySheet(props: { uid: string; episodeId: string; phrase
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setPending(undefined);
+    }
+  };
+
+  const toggleKnown = async (i: number) => {
+    const n = notes[i];
+    setError(undefined);
+    setFocused(undefined);
+    try {
+      const matches = knownMatches(n, known);
+      if (matches.length > 0) await unmarkKnown(uid, matches.map((k) => k.id));
+      else await markNoteKnown(uid, language, n);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -76,7 +99,12 @@ export function PhraseStudySheet(props: { uid: string; episodeId: string; phrase
         {notes.length > 0 ? (
           <div className="notes">
             {notes.map((n, i) => (
-              <div key={i} id={`note-${i}`} className={`note ${focused === i ? "focused" : ""}`} onClick={() => setFocused(i)}>
+              <div
+                key={noteIndex[i]}
+                id={`note-${i}`}
+                className={`note ${focused === i ? "focused" : ""} ${isKnownNote(n, known) ? "known" : ""}`}
+                onClick={() => setFocused(i)}
+              >
                 <div className="note-head">
                   <b>{n.title}</b>
                   <span className="pill">
@@ -101,18 +129,39 @@ export function PhraseStudySheet(props: { uid: string; episodeId: string; phrase
                   >
                     Explain differently
                   </button>
+                  {n.kind !== "transcription" && (
+                    <>
+                      <span className="spacer" />
+                      <button
+                        className="btn small ghost"
+                        title="Hide notes on this point and leave it out of new study notes"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void toggleKnown(i);
+                        }}
+                      >
+                        {isKnownNote(n, known) ? "Not known" : "I know this"}
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             ))}
           </div>
         ) : (
           <div className="row" style={{ marginTop: 12 }}>
-            <span className="small muted">Nothing here above your level.</span>
+            <span className="small muted">{knownCount > 0 ? "Nothing new for you here." : "Nothing here above your level."}</span>
             <span className="spacer" />
             <button className="btn small" disabled={!!pending} onClick={() => void ask("detail", "Explain this phrase")}>
               Explain it anyway
             </button>
           </div>
+        )}
+
+        {knownCount > 0 && (
+          <button className="btn small ghost" style={{ padding: 0, marginTop: 8 }} onClick={() => setShowKnown((v) => !v)}>
+            {showKnown ? "Hide known notes" : `${knownCount} known ${knownCount === 1 ? "note" : "notes"} hidden · Show`}
+          </button>
         )}
 
         {(thread.length > 0 || pending) && (

@@ -20,6 +20,32 @@ export interface StudyNote {
   level: CefrLevel;
 }
 
+/** A point the learner has marked as known. */
+export type KnownPoint = Pick<StudyNote, "kind" | "span" | "title">;
+
+const normalize = (s: string) => s.normalize("NFC").toLowerCase().replace(/\s+/g, " ").trim();
+
+/**
+ * Whether a note is on a known point: one with the same title, or the same kind and span.
+ * Transcription notes are about the phrase's text, so they never are. Must match isKnownNote in
+ * web/src/lib/notes.ts.
+ */
+export function isKnownNote(n: KnownPoint, known: KnownPoint[]): boolean {
+  if (n.kind === "transcription") return false;
+  const title = normalize(n.title);
+  const span = normalize(n.span);
+  return known.some((k) => (title && normalize(k.title) === title) || (span && k.kind === n.kind && normalize(k.span) === span));
+}
+
+function knownBlock(known: KnownPoint[]): string {
+  const list = known.map((k) => `- ${k.title} ("${k.span}", ${k.kind})`).join("\n");
+  return `The learner has marked these points as ones they already know. Don't write notes on them, in the phrase where they were marked or anywhere the same point comes up again. A note on a clearly different use of the same words is still fine.
+
+<known>
+${list}
+</known>`;
+}
+
 export interface PhraseStudy {
   translation: string;
   /** Word-for-word rendering, or "" when it adds nothing over the translation. */
@@ -86,6 +112,8 @@ export interface StudyRequest {
   /** Full episode transcript, one phrase per line. Identical across batches so it caches. */
   transcript: string;
   phrases: string[];
+  /** Points the learner already knows, to leave out. */
+  known: KnownPoint[];
 }
 
 /** Returns study material for each phrase, in the order given. */
@@ -105,6 +133,8 @@ export async function studyPhrases(req: StudyRequest): Promise<PhraseStudy[]> {
       system: [
         { type: "text", text: instructions(req.languageName) },
         { type: "text", text: `${req.transcript}\n</transcript>`, cache_control: { type: "ephemeral" } },
+        // After the cache breakpoint, so marking a point known doesn't invalidate the transcript.
+        ...(req.known.length > 0 ? [{ type: "text" as const, text: knownBlock(req.known) }] : []),
       ],
       messages: [{ role: "user", content: `Learner level: ${req.level}\n\nPhrases:\n${list}` }],
     })
@@ -125,9 +155,12 @@ export async function studyPhrases(req: StudyRequest): Promise<PhraseStudy[]> {
     const p = byId.get(id);
     if (!p) throw new Error(`Claude returned no entry for phrase ${id}.`);
     // Drop notes whose span isn't actually in the phrase (the UI highlights spans by exact match),
-    // and points below the learner's level. Transcription notes are about the text, so they stay.
+    // points below the learner's level, and points they know. Transcription notes are about the
+    // text, so they stay.
     const notes = p.notes.filter(
-      (n) => req.phrases[i].includes(n.span) && (n.kind === "transcription" || !isBelow(n.level, req.level)),
+      (n) =>
+        req.phrases[i].includes(n.span) &&
+        (n.kind === "transcription" || (!isBelow(n.level, req.level) && !isKnownNote(n, req.known))),
     );
     return { translation: p.translation.trim(), literal: p.literal.trim(), notes };
   });

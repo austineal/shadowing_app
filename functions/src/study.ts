@@ -25,10 +25,23 @@ import {
   claudeModelId,
 } from "./config.js";
 import { assertAllowed } from "./auth.js";
-import { CEFR_LEVELS, explain, studyPhrases, type CefrLevel, type StudyNote, type ThreadEntry } from "./claude.js";
+import { CEFR_LEVELS, explain, studyPhrases, type CefrLevel, type KnownPoint, type StudyNote, type ThreadEntry } from "./claude.js";
 
 /** Phrases per Claude request. */
 const STUDY_BATCH = 25;
+
+/** Most recently marked known points sent to Claude with each batch. */
+const KNOWN_LIMIT = 400;
+
+/** Points the learner has marked as known in a language, most recent last. */
+async function loadKnown(uid: string, language: string): Promise<KnownPoint[]> {
+  const snap = await db.collection(`users/${uid}/knownNotes`).where("lang", "==", language).get();
+  return snap.docs
+    .map((d) => d.data())
+    .sort((a, b) => (a.at ?? 0) - (b.at ?? 0))
+    .slice(-KNOWN_LIMIT)
+    .map((d) => ({ kind: d.kind, span: String(d.span ?? ""), title: String(d.title ?? "") }));
+}
 
 /** Must match phraseKey in web/src/lib/study.ts. */
 export function normalizePhrase(text: string): string {
@@ -266,6 +279,7 @@ export const studyChunk = onTaskDispatched<StudyChunkTask>(
           level,
           transcript,
           phrases: todo.map((it) => it.text),
+          known: await loadKnown(uid, language),
         });
         logger.info("Study batch done", { uid, episodeId, phrases: todo.length, ms: Date.now() - started });
         todo.forEach((it, i) => {

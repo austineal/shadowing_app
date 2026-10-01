@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { phraseKey, subscribeEpisodePhrases } from "../lib/study";
+import { isKnownNote, visibleNotes } from "../lib/notes";
+import { phraseKey, subscribeEpisodePhrases, subscribeKnownNotes } from "../lib/study";
 import { isVoiceStored, synthesize } from "../lib/tts/client";
 import type { ClipKind } from "../lib/sequence";
-import type { Episode, PhraseStudy, Segment } from "../types";
+import type { Episode, KnownNote, PhraseStudy, Segment, StudyNote } from "../types";
 
 /** How many phrases ahead of the current one to prepare English audio for. */
 const PREFETCH_AHEAD = 3;
@@ -32,6 +33,18 @@ export function useStudy(uid: string, episode: Episode, segments: Segment[], lan
     if (!enabled) return;
     return subscribeEpisodePhrases(uid, episode.id, setPhrases);
   }, [enabled, uid, episode.id]);
+
+  const [known, setKnown] = useState<KnownNote[]>([]);
+  useEffect(() => {
+    if (!enabled) return;
+    return subscribeKnownNotes(uid, language, setKnown);
+  }, [enabled, uid, language]);
+
+  /** A phrase's notes minus those on points the learner has marked as known. */
+  const shownNotes = useCallback(
+    (p: PhraseStudy): StudyNote[] => visibleNotes(p).filter((n) => !isKnownNote(n, known)),
+    [known],
+  );
 
   const phraseAt = useCallback(
     (i: number): PhraseStudy | undefined => (enabled ? phrases.get(keys[i]) : undefined),
@@ -100,7 +113,7 @@ export function useStudy(uid: string, episode: Episode, segments: Segment[], lan
     [englishClip],
   );
 
-  return { enabled, phraseAt, progress, prefetch, getClip, voiceReady, refreshVoice };
+  return { enabled, phraseAt, known, shownNotes, progress, prefetch, getClip, voiceReady, refreshVoice };
 }
 
 export type Study = ReturnType<typeof useStudy>;
