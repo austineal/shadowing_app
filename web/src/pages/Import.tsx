@@ -162,7 +162,7 @@ function UploadForm({ uid, language, folderId }: { uid: string; language: string
   );
 }
 
-const ROLES: Role[] = ["audio", "text", "englishAudio", "english", "lesson"];
+const ROLES: Role[] = ["audio", "text", "englishAudio", "english"];
 
 /** A deck of audio flashcards: a CSV with a row per card, and the audio files it names. */
 function DeckForm({ uid, language, folderId }: { uid: string; language: string; folderId: string | null }) {
@@ -187,7 +187,6 @@ function DeckForm({ uid, language, folderId }: { uid: string; language: string; 
   const read = cols ? readCards(body, cols, files, header ? 1 : 0) : null;
   const width = Math.max(header?.length ?? 0, ...body.slice(0, 50).map((r) => r.length));
   const columnName = (i: number) => header?.[i] || `Column ${i + 1}: ${body[0]?.[i] ?? ""}`.slice(0, 40);
-  const lessons = read ? new Set(read.cards.flatMap((c) => (c.lesson ? [c.lesson] : []))).size : 0;
   const withEnglish = read ? read.cards.filter((c) => c.englishAudio || c.english).length : 0;
 
   const submit = async () => {
@@ -207,7 +206,7 @@ function DeckForm({ uid, language, folderId }: { uid: string; language: string; 
   return (
     <div>
       <p className="small muted" style={{ marginTop: 0 }}>
-        A CSV with a row per card (its audio file, the sentence, and optionally English audio, English text and a lesson), and
+        A CSV with a row per card (its audio file, the sentence, and optionally English audio and English text), and
         the audio files it names. The cards are joined into one recording and added to your drills, to learn card by card.
       </p>
       <div className="field">
@@ -270,14 +269,12 @@ function DeckForm({ uid, language, folderId }: { uid: string; language: string; 
         <div className="field small">
           <p style={{ margin: "0 0 6px" }}>
             <b>{read.cards.length}</b> {read.cards.length === 1 ? "card" : "cards"}
-            {lessons > 0 && ` in ${lessons} ${lessons === 1 ? "lesson" : "lessons"}`}
             {read.cards.length > 0 && withEnglish < read.cards.length && (
               <span className="muted"> · {read.cards.length - withEnglish} without English (Claude can translate them)</span>
             )}
           </p>
           {read.cards.slice(0, 3).map((c, i) => (
             <div key={i} className="muted" style={{ marginBottom: 4 }}>
-              {c.lesson && <span>[{c.lesson}] </span>}
               {c.text}
               {c.english && <span> — {c.english}</span>}
               <span>

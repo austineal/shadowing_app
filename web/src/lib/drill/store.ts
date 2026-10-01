@@ -39,7 +39,7 @@ const toDrill = (d: QueryDocumentSnapshot<DocumentData>): Drill => ({ id: d.id, 
 function cleanPassage(p: DrillPassage): DrillPassage {
   const out: DrillPassage = { start: p.start, end: p.end };
   if (p.title) out.title = p.title;
-  for (const k of ["level", "due", "last", "reviews", "lapses", "lesson"] as const) if (p[k] !== undefined) out[k] = p[k];
+  for (const k of ["level", "due", "last", "reviews", "lapses"] as const) if (p[k] !== undefined) out[k] = p[k];
   if (p.card) out.card = true;
   return out;
 }

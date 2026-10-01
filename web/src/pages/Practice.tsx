@@ -458,11 +458,6 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
           const mark = marks.get(i);
           return (
             <Fragment key={s.id}>
-              {isDeck && s.lesson && s.lesson !== segments[i - 1]?.lesson && (
-                <div className="passage-label">
-                  <b>{s.lesson}</b>
-                </div>
-              )}
               {mark?.first && <PassageLabel mark={mark} />}
               <div className="seg-row">
                 <button

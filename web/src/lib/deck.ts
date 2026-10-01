@@ -58,7 +58,7 @@ export function fileRef(cell: string): string {
 
 // ---- Columns ----
 
-export type Role = "audio" | "englishAudio" | "text" | "english" | "lesson";
+export type Role = "audio" | "englishAudio" | "text" | "english";
 export type Columns = Record<Role, number | null>;
 
 export const ROLE_LABEL: Record<Role, string> = {
@@ -66,7 +66,6 @@ export const ROLE_LABEL: Record<Role, string> = {
   englishAudio: "English audio",
   text: "Sentence",
   english: "English text",
-  lesson: "Lesson",
 };
 
 const LATIN = /^[\p{Script=Latin}\p{N}\p{P}\p{Zs}\p{S}]*$/u;
@@ -74,7 +73,7 @@ const LATIN = /^[\p{Script=Latin}\p{N}\p{P}\p{Zs}\p{S}]*$/u;
 /**
  * Guesses which column is which: audio columns are the ones naming the chosen files (the first is
  * the card's, the English one has "en" in its header or comes second); the sentence is the text
- * not in Latin script (or headed so), the English the Latin one; the lesson goes by its header.
+ * not in Latin script (or headed so), the English the Latin one. Other columns are ignored.
  */
 export function guessColumns(header: string[] | null, rows: string[][], files: Set<string>): Columns {
   const width = Math.max(header?.length ?? 0, ...rows.map((r) => r.length));
@@ -92,8 +91,7 @@ export function guessColumns(header: string[] | null, rows: string[][], files: S
   const cardAudio = audio.find((i) => i !== englishAudio);
 
   const textCols = cols.filter((i) => !audio.includes(i) && share(i, (v) => v.length > 0) > 0.5);
-  const lesson = textCols.find((i) => /lesson|level|chapter|unit|group|section|tag/.test(name(i)));
-  const rest = textCols.filter((i) => i !== lesson);
+  const rest = textCols;
   const english = rest.find(isEnglishHeader) ?? rest.find((i) => share(i, (v) => LATIN.test(v) && /[a-z]/i.test(v)) > 0.8);
   const text =
     rest.find((i) => i !== english && /sentence|text|expression|japanese|target|front|jp|ja/.test(name(i))) ??
@@ -105,7 +103,6 @@ export function guessColumns(header: string[] | null, rows: string[][], files: S
     englishAudio: englishAudio ?? null,
     text: text ?? null,
     english: english ?? null,
-    lesson: lesson ?? null,
   };
 }
 
@@ -121,7 +118,6 @@ export interface DeckCard {
   text: string;
   english?: string;
   englishAudio?: File;
-  lesson?: string;
 }
 
 export interface DeckRead {
@@ -147,8 +143,7 @@ export function readCards(rows: string[][], cols: Columns, files: File[], firstR
     const englishAudio = enName ? byName.get(fileRef(enName)) : undefined;
     if (enName && !englishAudio) return skipped.push({ row, why: `no file called ${fileRef(enName)}` });
     const english = cell(r, cols.english);
-    const lesson = cell(r, cols.lesson);
-    cards.push({ audio, text, ...(english ? { english } : {}), ...(englishAudio ? { englishAudio } : {}), ...(lesson ? { lesson } : {}) });
+    cards.push({ audio, text, ...(english ? { english } : {}), ...(englishAudio ? { englishAudio } : {}) });
   });
   return { cards, skipped };
 }
@@ -199,7 +194,6 @@ export async function uploadDeck(
       uploads.push({ file: c.englishAudio, path: entry.englishAudio });
     }
     if (c.english) entry.english = c.english;
-    if (c.lesson) entry.lesson = c.lesson;
     return entry;
   });
 
@@ -226,31 +220,18 @@ export async function uploadDeck(
 
 // ---- Drilling ----
 
-/** A deck's lessons in the order they first appear. */
-export function deckLessons(segments: Segment[]): string[] {
-  return [...new Set(segments.flatMap((s) => (s.lesson ? [s.lesson] : [])))];
+/** A deck's cards as drill passages, shuffled: the order they'll be learned in. */
+export function cardPassages(segments: Segment[], random: () => number = Math.random): DrillPassage[] {
+  const cards = [...segments];
+  for (let i = cards.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [cards[i], cards[j]] = [cards[j], cards[i]];
+  }
+  return cards.map((s) => ({ start: s.start, end: s.end, card: true }));
 }
 
-/**
- * A deck's cards as drill passages, in the order they'll be learned: lesson by lesson, shuffled
- * within each lesson. Cards without a lesson come with the first.
- */
-export function cardPassages(segments: Segment[], lessons: string[], random: () => number = Math.random): DrillPassage[] {
-  const byLesson = lessons.length ? lessons.map(() => [] as Segment[]) : [[] as Segment[]];
-  for (const s of segments) byLesson[Math.max(0, s.lesson ? lessons.indexOf(s.lesson) : 0)].push(s);
-  return byLesson.flatMap((group, lesson) => {
-    const g = [...group];
-    for (let i = g.length - 1; i > 0; i--) {
-      const j = Math.floor(random() * (i + 1));
-      [g[i], g[j]] = [g[j], g[i]];
-    }
-    return g.map((s) => ({ start: s.start, end: s.end, card: true, ...(lessons.length ? { lesson } : {}) }));
-  });
-}
-
-/** Starts drilling a deck: every card, learned in the order cardPassages gives. */
+/** Starts drilling a deck: every card, learned in the shuffled order cardPassages gives. */
 export async function createCardsDrill(uid: string, episode: Episode, language: string, segments: Segment[]) {
-  const lessons = deckLessons(segments);
   return createDrill(uid, {
     kind: "cards",
     episodeId: episode.id,
@@ -259,8 +240,7 @@ export async function createCardsDrill(uid: string, episode: Episode, language: 
     language,
     start: 0,
     end: episode.durationSec ?? Math.max(...segments.map((s) => s.enEnd ?? s.end)),
-    passages: cardPassages(segments, lessons),
-    lessons,
+    passages: cardPassages(segments),
     learning: null,
   });
 }

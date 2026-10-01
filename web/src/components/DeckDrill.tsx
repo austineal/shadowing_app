@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useDrillPrefs, useNow } from "../hooks/useDrills";
-import { createCardsDrill, deckLessons } from "../lib/deck";
+import { createCardsDrill } from "../lib/deck";
 import { DEFAULT_SCHEDULE } from "../lib/drill/labels";
 import { formatProgress, progressOf } from "../lib/drill/progress";
 import { setSchedule } from "../lib/drill/store";
@@ -24,7 +24,6 @@ export function DeckDrill(props: {
   const { uid, episode, language, segments, drill } = props;
   const prefs = useDrillPrefs(uid);
   const now = useNow();
-  const lessons = drill?.lessons ?? deckLessons(segments);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string>();
   const [error, setError] = useState<string>();
@@ -54,8 +53,7 @@ export function DeckDrill(props: {
         <>
           <p className="small">{formatProgress(progressOf([drill], now)).replace(/^(\d+) of (\d+)/, "$1 of $2 cards")}</p>
           <p className="small muted">
-            Each session reviews the cards that are due, in shuffled rounds, then learns new ones five at a time
-            {lessons.length > 1 ? ", lesson by lesson" : ""}.
+            Each session reviews the cards that are due, in shuffled rounds, then learns new ones five at a time.
           </p>
         </>
       ) : done ? (
@@ -63,7 +61,7 @@ export function DeckDrill(props: {
       ) : (
         <>
           <p className="small">
-            {segments.length} cards{lessons.length > 1 ? ` in ${lessons.length} lessons` : ""}, not in your drills at the moment.
+            {segments.length} cards, not in your drills at the moment.
           </p>
         </>
       )}
