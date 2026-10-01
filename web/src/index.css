@@ -259,6 +259,7 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 .drill-cue.cue-answer { color: var(--ok); }
 .drill-english { color: var(--text-dim); font-size: 1.1rem; min-height: 1.5em; }
 .drill-text { font-size: 1.35rem; line-height: 1.5; min-height: 3em; }
+.drill-notes { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; min-height: 2.2em; }
 .drill-missed { min-width: 120px; }
 .drill-done { flex: 1; }
 .drill-done h2 { font-size: 1.3rem; }
