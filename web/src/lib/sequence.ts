@@ -12,18 +12,9 @@ export const PAUSE_BEFORE_ENGLISH_SEC = 0.8;
 /** What to do once a play (source audio plus its follow steps) is complete. */
 export type NextAction = { kind: "replay"; keepPlays: boolean } | { kind: "advance" } | { kind: "stop" };
 
-/**
- * Speed of the source audio on a given play (counting from 1). In auto and loop modes the first
- * `slowPlays` plays of a phrase are slowed to `slowRate`, but never sped up past `rate`.
- */
-export function sourceRate(settings: PracticeSettings, playNumber: number): number {
-  const slow = settings.mode !== "manual" && playNumber <= (settings.slowPlays ?? 0);
-  return slow ? Math.min(settings.rate, settings.slowRate ?? settings.rate) : settings.rate;
-}
-
-/** Silence after a phrase for the user to speak in: the phrase's length as just played, times gapFactor. */
-export function gapSeconds(seg: Segment, settings: PracticeSettings, playNumber = 1): number {
-  return Math.max(0.4, ((seg.end - seg.start) / sourceRate(settings, playNumber)) * settings.gapFactor);
+/** Silence after a phrase for the user to speak in: the phrase's length as played, times gapFactor. */
+export function gapSeconds(seg: Segment, settings: PracticeSettings): number {
+  return Math.max(0.4, ((seg.end - seg.start) / settings.rate) * settings.gapFactor);
 }
 
 /**

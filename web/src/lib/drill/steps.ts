@@ -49,9 +49,12 @@ export interface DrillOptions {
   answerExtraSec: number;
 }
 
+/** Speed of the slowed listen-and-repeat plays in the full learning drill. */
+const SLOW_RATE = 0.75;
+
 export function drillOptions(
   style: "full" | "light",
-  base: { paddingMs: number; gapFactor: number; slowRate?: number },
+  base: { paddingMs: number; gapFactor: number },
   answerExtraSec = 0,
 ): DrillOptions {
   return {
@@ -59,7 +62,7 @@ export function drillOptions(
     gapFactor: base.gapFactor,
     repeats: style === "full" ? 3 : 2,
     slowPlays: style === "full" ? 2 : 0,
-    slowRate: Math.min(1, base.slowRate ?? 0.75),
+    slowRate: SLOW_RATE,
     answerExtraSec: Math.max(0, answerExtraSec),
   };
 }

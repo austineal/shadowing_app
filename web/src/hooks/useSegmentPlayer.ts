@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createGraph, schedule, startOutput, type Graph } from "../lib/audioGraph";
-import { gapSeconds, nextAction, sourceRate, stepsAfterSource, type ClipKind, type FollowStep } from "../lib/sequence";
+import { gapSeconds, nextAction, stepsAfterSource, type ClipKind, type FollowStep } from "../lib/sequence";
 import type { PracticeSettings, Segment } from "../types";
 
 /** playing: source audio. clip: an extra clip (translation etc.). gap: silence for the user to speak. */
@@ -102,8 +102,8 @@ export function useSegmentPlayer(audioSrc: string | undefined, opts: Options) {
 
   // Live playback-rate changes.
   useEffect(() => {
-    if (audioRef.current) audioRef.current.playbackRate = sourceRate(stateRef.current.settings, playsRef.current + 1);
-  }, [opts.settings.rate, opts.settings.slowPlays, opts.settings.slowRate, opts.settings.mode]);
+    if (audioRef.current) audioRef.current.playbackRate = opts.settings.rate;
+  }, [opts.settings.rate]);
 
   /** Connects the element to the graph and starts the continuous output stream. */
   const startGraph = useCallback(async (a: HTMLAudioElement) => {
@@ -196,7 +196,7 @@ export function useSegmentPlayer(audioSrc: string | undefined, opts: Options) {
     if (step.kind === "gap") {
       setPhase("gap");
       const seg = segments[i];
-      cancelStepRef.current = schedule(graphRef.current, seg ? gapSeconds(seg, settings, done) : 0.4, advance);
+      cancelStepRef.current = schedule(graphRef.current, seg ? gapSeconds(seg, settings) : 0.4, advance);
       return;
     }
     // Clips play through the same graph so the background keep-alive stream carries them,
@@ -279,7 +279,7 @@ export function useSegmentPlayer(audioSrc: string | undefined, opts: Options) {
     const pad = settings.paddingMs / 1000;
     const start = Math.max(0, seg.start - pad);
     const end = seg.end + pad;
-    a.playbackRate = sourceRate(settings, playsRef.current + 1);
+    a.playbackRate = settings.rate;
     const token = ++startTokenRef.current;
 
     const begin = async () => {

@@ -22,8 +22,7 @@ import {
 import { formatTime } from "../lib/format";
 import { isCharBased, languageLabel, normalizeLanguageCode } from "../lib/languages";
 import { mergeSegments, segmentTokens, splitSegment } from "../lib/segmenter";
-import { sourceRate } from "../lib/sequence";
-import { loadDefaultSettings, saveDefaultSettings } from "../lib/settings";
+import { episodeSettings, loadDefaultSettings, saveDefaultSettings } from "../lib/settings";
 import { useOnline } from "../lib/offline";
 import { ExcerptPicker } from "../components/ExcerptPicker";
 import { ExcerptSuggestionsSheet } from "../components/ExcerptSuggestions";
@@ -189,7 +188,7 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
   const language = effectiveLanguage(episode);
   const charBased = isCharBased(language);
 
-  const [settings, setSettings] = useState<PracticeSettings>(() => ({ ...loadDefaultSettings(), ...episode.settings }));
+  const [settings, setSettings] = useState<PracticeSettings>(() => episodeSettings(episode.settings));
   const [src, setSrc] = useState<string>();
   const [showSettings, setShowSettings] = useState(false);
   /** Phrase whose study sheet is open. */
@@ -522,9 +521,6 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
                 {settings.mode === "auto" && repeats > 1 && (
                   <span className="muted"> · play {Math.min(player.plays + 1, repeats)} of {repeats}</span>
                 )}
-                {sourceRate(settings, player.plays + 1) < settings.rate && (
-                  <span className="muted"> · {sourceRate(settings, player.plays + 1)}×</span>
-                )}
               </span>
               <span>
                 {player.phase === "gap"
@@ -660,7 +656,6 @@ function SettingsSheet(props: {
 }) {
   const { settings, onChange } = props;
   const repeats = clampRepeats(settings.repeats);
-  const slowPlays = Math.max(0, Math.min(5, Math.round(settings.slowPlays ?? 0)));
   const [maxPhrase, setMaxPhrase] = useState(props.segDoc.maxPhraseSec);
   const [transcript, setTranscript] = useState("");
   const [showTranscript, setShowTranscript] = useState(false);
@@ -700,30 +695,6 @@ function SettingsSheet(props: {
           </div>
           <p className="small muted" style={{ marginTop: 4 }}>
             In Auto mode each phrase plays this many times, with a pause after each, before moving to the next one.
-          </p>
-        </div>
-        <div className="slider">
-          <div className="row">
-            <span>Slow first plays (Auto, Loop)</span>
-            <span className="muted">
-              {slowPlays === 0 ? "off" : `first ${slowPlays === 1 ? "play" : `${slowPlays} plays`} at ${settings.slowRate ?? 0.75}×`}
-            </span>
-          </div>
-          <input type="range" min={0} max={5} step={1} value={slowPlays} onChange={(e) => set({ slowPlays: Number(e.target.value) })} />
-          <div className="row wrap" style={{ marginTop: 4, justifyContent: "flex-start" }}>
-            {[0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9].map((r) => (
-              <button
-                key={r}
-                className={`btn small ${(settings.slowRate ?? 0.75) === r ? "active" : ""}`}
-                disabled={slowPlays === 0}
-                onClick={() => set({ slowRate: r })}
-              >
-                {r}×
-              </button>
-            ))}
-          </div>
-          <p className="small muted" style={{ marginTop: 4 }}>
-            The first plays of each phrase are slowed down to help you catch every word, then it plays at normal speed.
           </p>
         </div>
 

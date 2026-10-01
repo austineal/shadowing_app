@@ -92,6 +92,27 @@ export function buildLibraryTree(episodes: Episode[], folders: Folder[]): Librar
   return roots.sort((a, b) => (a.language === "unknown" ? 1 : b.language === "unknown" ? -1 : byLabel(a, b)));
 }
 
+/** Lower case, without accents or width variants, so "teheran" finds "Téhéran". */
+export function searchKey(text: string): string {
+  return text.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
+}
+
+/**
+ * The episodes a search finds: those with every word of the query in their title, podcast, folder
+ * or language. They keep the order they were given in.
+ */
+export function searchEpisodes(episodes: Episode[], folders: Folder[], query: string): Episode[] {
+  const words = searchKey(query).split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [];
+  const folderName = new Map(folders.map((f) => [f.id, f.name]));
+  return episodes.filter((ep) => {
+    const lang = episodeLanguage(ep);
+    const fields = [ep.title, ep.feedTitle, ep.folderId && folderName.get(ep.folderId), lang !== "unknown" && languageLabel(lang)];
+    const text = searchKey(fields.filter(Boolean).join("\n"));
+    return words.every((w) => text.includes(w));
+  });
+}
+
 /** Publish time in ms, or 0 when the feed omits or garbles the date. */
 export function pubTime(pubDate: string | undefined): number {
   if (!pubDate) return 0;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildLibraryTree, episodeLanguage, feedStats, pubTime, type LibraryNode } from "./organise";
+import { buildLibraryTree, episodeLanguage, feedStats, pubTime, searchEpisodes, type LibraryNode } from "./organise";
 import type { Episode, Folder } from "../types";
 
 function ep(id: string, extra: Partial<Episode> = {}): Episode {
@@ -46,6 +46,33 @@ describe("buildLibraryTree", () => {
   it("puts folders without a language under Other", () => {
     const tree = buildLibraryTree([], [{ id: "old", name: "Legacy", createdAt: null }]);
     expect(shape(tree)).toEqual([["Other (0)", [], [["Legacy (0)", [], []]]]]);
+  });
+});
+
+describe("searchEpisodes", () => {
+  const ids = (q: string, list = episodes) => searchEpisodes(list, folders, q).map((e) => e.id);
+  const named = [
+    ep("t", { title: "Passages - Le prisonnier de Téhéran" }),
+    ep("l5", { title: "Lesson 05", language: "ja", folderId: "f3" }),
+    ep("l15", { title: "Lesson 15", language: "ja", folderId: "f3" }),
+    ep("p", { title: "#１５８７「レストラン」", language: "ja", ...radioX }),
+  ];
+  const withAssimil = [...folders, { id: "f3", name: "Assimil", language: "ja", createdAt: null }];
+
+  it("finds titles regardless of case and accents", () => {
+    expect(ids("TEHERAN", named)).toEqual(["t"]);
+    expect(ids("téhéran", named)).toEqual(["t"]);
+  });
+  it("needs every word, from the title, podcast, folder or language", () => {
+    expect(searchEpisodes(named, withAssimil, "assimil 05").map((e) => e.id)).toEqual(["l5"]);
+    expect(searchEpisodes(named, withAssimil, "japanese lesson").map((e) => e.id)).toEqual(["l5", "l15"]);
+    expect(ids("radio 1587", named)).toEqual(["p"]);
+  });
+  it("matches full-width characters typed as ordinary ones", () => {
+    expect(ids("1587", named)).toEqual(["p"]);
+  });
+  it("finds nothing for an empty query", () => {
+    expect(ids("  ", named)).toEqual([]);
   });
 });
 

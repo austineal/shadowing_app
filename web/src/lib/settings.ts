@@ -2,15 +2,25 @@ import { DEFAULT_SETTINGS, type PracticeSettings } from "../types";
 
 const KEY = "shadowing.defaultSettings";
 
+/** A saved copy of settings without fields that have since been removed, so saving it again drops them. */
+function currentFields(saved: Partial<PracticeSettings> | undefined): Partial<PracticeSettings> {
+  return Object.fromEntries(Object.entries(saved ?? {}).filter(([k]) => k in DEFAULT_SETTINGS));
+}
+
 /** Global defaults, used for new episodes. Per-episode overrides live on the episode document. */
 export function loadDefaultSettings(): PracticeSettings {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return { ...DEFAULT_SETTINGS };
-    return { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<PracticeSettings>) };
+    return { ...DEFAULT_SETTINGS, ...currentFields(JSON.parse(raw) as Partial<PracticeSettings>) };
   } catch {
     return { ...DEFAULT_SETTINGS };
   }
+}
+
+/** An episode's settings: its own saved ones over the global defaults. */
+export function episodeSettings(saved: Partial<PracticeSettings> | undefined): PracticeSettings {
+  return { ...loadDefaultSettings(), ...currentFields(saved) };
 }
 
 export function saveDefaultSettings(s: PracticeSettings): void {
