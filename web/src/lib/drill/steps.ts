@@ -40,11 +40,14 @@ export interface DrillOptions {
   /** How many of those plays are slowed down. */
   slowPlays: number;
   slowRate: number;
+  /** Extra time to answer after each English cue, on top of the pause sized to the phrase. */
+  answerExtraSec: number;
 }
 
 export function drillOptions(
   style: "full" | "light",
   base: { paddingMs: number; gapFactor: number; slowRate?: number },
+  answerExtraSec = 0,
 ): DrillOptions {
   return {
     paddingSec: base.paddingMs / 1000,
@@ -52,13 +55,14 @@ export function drillOptions(
     repeats: style === "full" ? 3 : 2,
     slowPlays: style === "full" ? 2 : 0,
     slowRate: Math.min(1, base.slowRate ?? 0.75),
+    answerExtraSec: Math.max(0, answerExtraSec),
   };
 }
 
 /** A short breath between steps. */
-const BEAT_SEC = 0.4;
-/** After the answer: time to press Missed before the drill moves on. */
-const GRACE_SEC = 1.0;
+const BEAT_SEC = 1.0;
+/** After the answer: time to press Missed before the drill moves on. (A press during the next English still counts; see DrillSession.missed.) */
+const GRACE_SEC = 2.0;
 
 const duration = (ps: SessionPhrase[]) => ps[ps.length - 1].end - ps[0].start;
 
@@ -66,10 +70,10 @@ const duration = (ps: SessionPhrase[]) => ps[ps.length - 1].end - ps[0].start;
  * Time to say phrases after their English cue: generous while learning (level -1) and at first,
  * closer to the speaker's own pace as the passage matures.
  */
-export function speakSeconds(sec: number, level: number): number {
-  if (level <= 1) return sec * 1.5 + 1.2;
-  if (level <= 3) return sec * 1.3 + 0.9;
-  return sec * 1.15 + 0.6;
+export function speakSeconds(sec: number, level: number, extra = 0): number {
+  if (level <= 1) return sec * 1.5 + 2.0 + extra;
+  if (level <= 3) return sec * 1.3 + 1.6 + extra;
+  return sec * 1.15 + 1.2 + extra;
 }
 
 function source(episodeId: string, ps: SessionPhrase[], rate = 1): Play {
@@ -107,7 +111,7 @@ export function learnSteps(episodeId: string, p: SessionPhrase, opts: DrillOptio
  * The English of one or more consecutive phrases, time to say them, then the original as the
  * answer. The text stays hidden until the answer plays.
  */
-export function testSteps(episodeId: string, ps: SessionPhrase[], level: number): Step[] {
+export function testSteps(episodeId: string, ps: SessionPhrase[], level: number, opts: DrillOptions): Step[] {
   const english = ps.map((p) => p.english ?? "").join(" ");
   const steps: Step[] = [];
   ps.forEach((p, i) => {
@@ -115,7 +119,7 @@ export function testSteps(episodeId: string, ps: SessionPhrase[], level: number)
     steps.push({ play: { kind: "english", text: p.english ?? "" }, cue: "english", english });
   });
   const text = textOf(ps);
-  steps.push({ play: { kind: "silence", sec: speakSeconds(duration(ps), level) }, cue: "speak", english });
+  steps.push({ play: { kind: "silence", sec: speakSeconds(duration(ps), level, opts.answerExtraSec) }, cue: "speak", english });
   steps.push({ play: source(episodeId, ps), cue: "answer", text, english });
   steps.push({ play: { kind: "silence", sec: GRACE_SEC }, cue: "answer", text, english });
   return steps;

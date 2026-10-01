@@ -57,7 +57,7 @@ export function ExcerptSuggestionsSheet(props: {
   const pace = weeklyPace(
     schedule,
     (sessions ?? []).filter((l) => l.language === language),
-    drillOptions(schedule.learning, loadDefaultSettings()),
+    drillOptions(schedule.learning, loadDefaultSettings(), schedule.answerTime ?? 0),
     now,
   );
   const minutes = excerptMinutes(pace);

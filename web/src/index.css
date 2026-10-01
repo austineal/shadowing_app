@@ -243,3 +243,13 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 .suggestion.skip { opacity: 0.55; }
 .suggestion-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .suggestion-head .title { font-weight: 600; }
+.drill-stage { position: relative; }
+.drill-toast {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  max-width: calc(100% - 32px); padding: 8px 14px; border-radius: 999px;
+  background: var(--bg-elev2); border: 1px solid var(--border); font-size: 0.9rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; animation: toast-in 0.15s ease-out;
+}
+.drill-toast.missed { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 55%, transparent); }
+.drill-toast.skip { color: var(--text-dim); }
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, -6px); } to { opacity: 1; transform: translate(-50%, 0); } }

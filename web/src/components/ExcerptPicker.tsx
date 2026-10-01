@@ -80,7 +80,7 @@ export function ExcerptPicker(props: {
   const end = picked[picked.length - 1].end;
   const passages = splitPassages(picked);
   const schedule = prefs?.schedules[language];
-  const opts = drillOptions(schedule?.learning ?? "full", loadDefaultSettings());
+  const opts = drillOptions(schedule?.learning ?? "full", loadDefaultSettings(), schedule?.answerTime ?? 0);
   const learnSec = learningSeconds(
     passages.map((p) => phrasesIn(picked, p.start, p.end)),
     opts,

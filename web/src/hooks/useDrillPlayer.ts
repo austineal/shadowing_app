@@ -5,6 +5,9 @@ import type { Play } from "../lib/drill/steps";
 
 export type DrillPlayerState = "idle" | "playing" | "paused" | "finished";
 
+/** A press the player confirmed, for the screen to show: Missed (with the phrases marked) or Skip. `id` counts presses. */
+export type PlayerAction = { id: number } & ({ kind: "missed"; text: string; late: boolean } | { kind: "skip" });
+
 export interface DrillAudioOptions {
   /** Audio URL of each episode the session plays from. */
   sources: Record<string, string>;
@@ -19,6 +22,7 @@ interface Listener {
   position: (sec: number) => void;
   state: (s: DrillPlayerState) => void;
   error: (message: string | undefined) => void;
+  action: (a: PlayerAction) => void;
 }
 
 interface Source {
@@ -40,6 +44,7 @@ class DrillAudio {
   private cancelStep: () => void = () => {};
   private raf = 0;
   private playing = false;
+  private presses = 0;
   private readonly session: DrillSession;
   private readonly opts: DrillAudioOptions;
   private readonly on: Listener;
@@ -77,19 +82,53 @@ class DrillAudio {
 
   /** Moves on to the next step now. */
   skip() {
+    this.chime("skip");
+    this.on.action({ id: ++this.presses, kind: "skip" });
     this.stopStep();
     this.session.advance();
     this.runStep();
   }
 
-  /** Marks the current test missed; before the answer, jumps straight to it. */
+  /** Marks a test missed (see DrillSession.missed); before the answer, jumps straight to it. */
   missed() {
-    if (this.session.missed() && this.playing) {
+    const miss = this.session.missed();
+    if (!miss) return;
+    this.chime("missed");
+    this.on.action({ id: ++this.presses, kind: "missed", text: miss.phrases.map((p) => p.text).join(" "), late: miss.late });
+    if (miss.jumped && this.playing) {
       this.stopStep();
       this.runStep();
     } else {
       this.on.step(this.session.current());
     }
+  }
+
+  /**
+   * A short tone confirming a press: two falling notes for Missed, a tick for Skip. It goes through
+   * the same output as everything else, so it's heard with the screen off too.
+   */
+  private chime(kind: "missed" | "skip") {
+    const g = this.graph;
+    if (!g || g.ctx.state !== "running") return;
+    const notes = kind === "missed" ? [523, 392] : [1047];
+    const t0 = g.ctx.currentTime + 0.01;
+    notes.forEach((freq, i) => {
+      const t = t0 + i * 0.13;
+      const osc = g.ctx.createOscillator();
+      const gain = g.ctx.createGain();
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.25, t + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+      osc.connect(gain);
+      gain.connect(outputOf(g));
+      osc.onended = () => {
+        osc.disconnect();
+        gain.disconnect();
+      };
+      osc.start(t);
+      osc.stop(t + 0.13);
+    });
   }
 
   /** Lock-screen "back": Missed during a test, otherwise the current step again. */
@@ -324,11 +363,6 @@ class DrillAudio {
   }
 }
 
-/** Whether a step is part of a test, where Missed counts. */
-export function canMissAt(cur: Current | null): boolean {
-  return !!cur?.unit.test && (cur.step.cue === "english" || cur.step.cue === "speak" || cur.step.cue === "answer");
-}
-
 /**
  * Plays a drill session. `opts` must be ready (English synthesised) before playback starts; the
  * player is rebuilt if the session or options change.
@@ -338,14 +372,27 @@ export function useDrillPlayer(session: DrillSession | null, opts: DrillAudioOpt
   const [current, setCurrent] = useState<Current | null>(null);
   const [position, setPosition] = useState(0);
   const [error, setError] = useState<string>();
+  const [action, setAction] = useState<PlayerAction>();
 
   const audio = useMemo(
     () =>
       session && opts
-        ? new DrillAudio(session, opts, { step: setCurrent, position: setPosition, state: setState, error: setError })
+        ? new DrillAudio(session, opts, {
+            step: setCurrent,
+            position: setPosition,
+            state: setState,
+            error: setError,
+            action: setAction,
+          })
         : null,
     [session, opts],
   );
+  // A confirmation shows for a moment.
+  useEffect(() => {
+    if (!action) return;
+    const t = window.setTimeout(() => setAction(undefined), 2000);
+    return () => window.clearTimeout(t);
+  }, [action]);
   useEffect(() => {
     if (!audio) return;
     audio.preload();
@@ -359,7 +406,9 @@ export function useDrillPlayer(session: DrillSession | null, opts: DrillAudioOpt
     /** Playback time within the episode, for following a span of several phrases. */
     position,
     error,
-    canMiss: canMissAt(shown),
+    /** The last press confirmed, for about two seconds. */
+    action,
+    canMiss: session?.canMiss() ?? false,
     play: useCallback(() => void audio?.play(), [audio]),
     pause: useCallback(() => audio?.pause(), [audio]),
     skip: useCallback(() => audio?.skip(), [audio]),

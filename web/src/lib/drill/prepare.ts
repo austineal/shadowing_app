@@ -48,7 +48,7 @@ function blockPhrases(b: Block): SessionPhrase[] {
 export async function prepareSession(uid: string, language: string, now: number, withAudio = true): Promise<Prepared> {
   const [prefs, drills] = await Promise.all([getDrillPrefs(uid), getDrills(uid, language)]);
   const schedule = prefs.schedules[language] ?? DEFAULT_SCHEDULE;
-  const opts = drillOptions(schedule.learning, loadDefaultSettings());
+  const opts = drillOptions(schedule.learning, loadDefaultSettings(), schedule.answerTime ?? 0);
   const loaded = (
     await Promise.all(
       drills.map(async (drill) => {

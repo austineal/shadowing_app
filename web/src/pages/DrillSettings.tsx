@@ -153,6 +153,21 @@ function LanguageCard(props: {
               </select>
             </label>
             <label className="field-row">
+              <span>Time to answer</span>
+              <select
+                className="input"
+                value={schedule.answerTime ?? 0}
+                onChange={(e) => set({ answerTime: Number(e.target.value) || undefined })}
+              >
+                <option value={0}>Normal</option>
+                {[1, 2, 3, 4].map((n) => (
+                  <option key={n} value={n}>
+                    {n} {n === 1 ? "second" : "seconds"} more
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field-row">
               <span>Your level</span>
               <select
                 className="input"

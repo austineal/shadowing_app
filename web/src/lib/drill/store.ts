@@ -101,8 +101,7 @@ export async function setSchedule(uid: string, language: string, schedule: Drill
     await setDoc(prefsDoc(uid), { schedules: { [language]: deleteField() } }, { merge: true });
     return;
   }
-  const clean: DrillSchedule = { ...schedule };
-  if (clean.anchorDay === undefined) delete clean.anchorDay;
+  const clean = Object.fromEntries(Object.entries(schedule).filter(([, v]) => v !== undefined)) as DrillSchedule;
   await setDoc(prefsDoc(uid), { schedules: { [language]: clean } }, { mergeFields: [`schedules.${language}`] });
 }
 

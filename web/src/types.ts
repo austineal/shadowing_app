@@ -209,6 +209,8 @@ export interface DrillSchedule {
   newMaterial: boolean;
   /** full: three listen-and-repeat plays, the first two slowed. light: two plays at normal speed. */
   learning: "full" | "light";
+  /** Extra seconds to answer after each English cue (absent: none). */
+  answerTime?: number;
   /** For languages drilled every few days: a day number (see dayNumber) the cycle counts from, so they can take turns. */
   anchorDay?: number;
 }
