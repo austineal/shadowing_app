@@ -1,5 +1,5 @@
 /**
- * Loading and planning a language's next drill session: its excerpts, their episodes' phrases and
+ * Loading and planning a schedule's next drill session: its excerpts, their episodes' phrases and
  * English, the plan for the time available, and the English the plan needs spoken. Used by the
  * session page and by the background preparation of English clips.
  */
@@ -11,6 +11,7 @@ import type { Drill, DrillPrefs, DrillSchedule } from "../../types";
 import { sessionDays } from "./forecast";
 import { DEFAULT_SCHEDULE } from "./labels";
 import { phrasesIn } from "./passages";
+import { drillScheduleKey, logScheduleKey, scheduleLanguage } from "./schedules";
 import { CARD_BATCH, frontier, planSession, type PlanDrill, type SessionPlan } from "./plan";
 import { sessionEnglish, type Block } from "./session";
 import { DAY_MS, isDue } from "./srs";
@@ -18,6 +19,9 @@ import { canCue, drillOptions, type DrillOptions, type SessionPhrase } from "./s
 import { getDrillPrefs, getDrills, getRecentSessions, loadTranslations } from "./store";
 
 export interface Prepared {
+  /** The schedule's key, and the language it drills. */
+  key: string;
+  language: string;
   schedule: DrillSchedule;
   opts: DrillOptions;
   plan: SessionPlan;
@@ -57,15 +61,14 @@ function blockPhrases(b: Block): SessionPhrase[] {
   return b.phrases.slice(Math.max(0, b.from - 1), b.to);
 }
 
-/** Plans the language's session as it would run at `now`. */
-export async function prepareSession(uid: string, language: string, now: number, options: PrepareOptions = {}): Promise<Prepared> {
+/** Plans the session of the schedule with this key (a language code for its main one) as it would run at `now`. */
+export async function prepareSession(uid: string, key: string, now: number, options: PrepareOptions = {}): Promise<Prepared> {
   const { withAudio = true, learnAnyway = false } = options;
-  const [prefs, drills, recent] = await Promise.all([
-    getDrillPrefs(uid),
-    getDrills(uid, language),
-    getRecentSessions(uid, now - 8 * DAY_MS).catch(() => []),
-  ]);
-  const schedule = prefs.schedules[language] ?? DEFAULT_SCHEDULE;
+  const prefs = await getDrillPrefs(uid);
+  const language = scheduleLanguage(key, prefs.schedules[key]);
+  const [all, recent] = await Promise.all([getDrills(uid, language), getRecentSessions(uid, now - 8 * DAY_MS).catch(() => [])]);
+  const drills = all.filter((d) => drillScheduleKey(d, prefs) === key);
+  const schedule = prefs.schedules[key] ?? DEFAULT_SCHEDULE;
   const opts = scheduleOptions(schedule);
   const loaded = (
     await Promise.all(
@@ -97,8 +100,8 @@ export async function prepareSession(uid: string, language: string, now: number,
       ...(s.enStart !== undefined && s.enEnd !== undefined ? { englishAt: { start: s.enStart, end: s.enEnd } } : {}),
     })),
   }));
-  // The language's sessions after this one, which a new passage's reviews have to fit in.
-  const counted = recent.filter((l) => l.language === language && l.progress > 0);
+  // The schedule's sessions after this one, which a new passage's reviews have to fit in.
+  const counted = recent.filter((l) => logScheduleKey(l, prefs) === key && l.progress > 0);
   const later = learnAnyway ? undefined : sessionDays(schedule, [...counted, { startedAt: now, endedAt: now }], now, 9);
   const plan = planSession({
     now,
@@ -118,6 +121,8 @@ export async function prepareSession(uid: string, language: string, now: number,
   const untranslated = plan.blocks.reduce((n, b) => n + blockPhrases(b).filter((p) => !canCue(p)).length, 0);
   const upcoming = loaded.flatMap(({ drill }) => drill.passages.flatMap((p) => (p.level !== undefined && p.due ? [p.due] : [])));
   return {
+    key,
+    language,
     schedule,
     opts,
     plan,

@@ -7,12 +7,13 @@ import { learningDrill } from "../lib/drill/plan";
 import { prefetchDrillEnglish } from "../lib/drill/prefetch";
 import { drillVoice } from "../lib/drill/prepare";
 import { isDue } from "../lib/drill/srs";
-import { languageLabel } from "../lib/languages";
+import { drillScheduleKey, logScheduleKey, scheduleLabel } from "../lib/drill/schedules";
 import type { Drill, DrillPrefs, DrillSchedule, DrillSessionLog } from "../types";
 import { PassageMap } from "./PassageMap";
 
 interface Row {
-  language: string;
+  key: string;
+  label: string;
   schedule: DrillSchedule;
   availability: Availability;
   due: number;
@@ -22,15 +23,16 @@ interface Row {
   latest?: Drill;
 }
 
-/** One row per scheduled language, due ones first. */
+/** One row per schedule, due ones first. */
 function buildRows(prefs: DrillPrefs, drills: Drill[], sessions: DrillSessionLog[], now: number): Row[] {
   return Object.keys(prefs.schedules)
-    .map((language) => {
-      const schedule = prefs.schedules[language];
-      const mine = drills.filter((d) => d.language === language);
-      const counted = sessions.filter((s) => s.language === language && s.progress > 0);
+    .map((key) => {
+      const schedule = prefs.schedules[key];
+      const mine = drills.filter((d) => drillScheduleKey(d, prefs) === key);
+      const counted = sessions.filter((s) => logScheduleKey(s, prefs) === key && s.progress > 0);
       return {
-        language,
+        key,
+        label: scheduleLabel(key, schedule),
         schedule,
         availability: availability(schedule, counted, now),
         due: mine.reduce((n, d) => n + d.passages.filter((p) => isDue(p, now)).length, 0),
@@ -41,7 +43,7 @@ function buildRows(prefs: DrillPrefs, drills: Drill[], sessions: DrillSessionLog
     })
     .sort(
       (a, b) =>
-        Number(b.availability.due) - Number(a.availability.due) || languageLabel(a.language).localeCompare(languageLabel(b.language)),
+        Number(b.availability.due) - Number(a.availability.due) || a.label.localeCompare(b.label),
     );
 }
 
@@ -68,7 +70,7 @@ export function DrillToday({
   const voice = drillVoice(prefs);
   const toPrepare = (rows ?? [])
     .filter((r) => r.excerpts > 0)
-    .map((r) => r.language)
+    .map((r) => r.key)
     .join(",");
   useEffect(() => {
     if (!toPrepare) return;
@@ -100,14 +102,14 @@ export function DrillToday({
         </Link>
       </div>
       {rows.map((r) => (
-        <TodayRow key={r.language} row={r} now={now} />
+        <TodayRow key={r.key} row={r} now={now} />
       ))}
     </section>
   );
 }
 
 function TodayRow({ row, now }: { row: Row; now: number }) {
-  const { language, schedule, availability: a, due, learning } = row;
+  const { key, label, schedule, availability: a, due, learning } = row;
   const work = due > 0 || !!learning;
   const detail =
     row.excerpts === 0
@@ -122,7 +124,7 @@ function TodayRow({ row, now }: { row: Row; now: number }) {
     <div className="drill-row">
       <div className="body">
         <div className="title">
-          {languageLabel(language)}
+          {label}
           <span className="muted small">
             {" "}
             · {schedule.minutes} min
@@ -143,13 +145,13 @@ function TodayRow({ row, now }: { row: Row; now: number }) {
       </div>
       {work &&
         (a.due ? (
-          <Link to={`/drill/${language}`} className="btn primary small">
+          <Link to={`/drill/${key}`} className="btn primary small">
             Start
           </Link>
         ) : (
           <div className="next">
             <span className="small muted">Next {a.next ? formatNext(a.next, now) : "later"}</span>
-            <Link to={`/drill/${language}`} className="small">
+            <Link to={`/drill/${key}`} className="small">
               Extra session
             </Link>
           </div>

@@ -27,7 +27,7 @@ export default function App() {
         <Route path="/episode/:id" element={<Practice uid={uid} />} />
         <Route path="/podcast/:id" element={<Podcast uid={uid} />} />
         <Route path="/drill/settings" element={<DrillSettings uid={uid} />} />
-        <Route path="/drill/:language" element={<DrillSession uid={uid} />} />
+        <Route path="/drill/:schedule" element={<DrillSession uid={uid} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>

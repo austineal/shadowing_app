@@ -177,6 +177,8 @@ export interface Drill {
   title?: string;
   /** Concrete language code (never "auto"). */
   language: string;
+  /** Key of the schedule it's drilled on (see DrillPrefs.schedules). Absent: the language's main one. */
+  schedule?: string;
   /** Excerpt bounds, in seconds of episode audio. */
   start: number;
   end: number;
@@ -219,8 +221,15 @@ export interface DrillPassage {
   lesson?: number;
 }
 
-/** How often a language's drill sessions come up. Stored per language in users/{uid}/prefs/drill. */
+/**
+ * How often a set of drills comes up. Stored in users/{uid}/prefs/drill. A language's main
+ * schedule is keyed by its code; it can have more, each with a generated key and its own drills.
+ */
 export interface DrillSchedule {
+  /** The language, for schedules other than the main one (whose key is the language). */
+  language?: string;
+  /** What it's for ("News podcast", "Kanji deck"), to tell a language's schedules apart. */
+  name?: string;
   /** Sessions a day, for languages drilled every day. */
   perDay: number;
   /** Days between sessions; 1 = every day. */
@@ -238,6 +247,7 @@ export interface DrillSchedule {
 }
 
 export interface DrillPrefs {
+  /** By key: a language code for its main schedule, else a generated key (see DrillSchedule). */
   schedules: Record<string, DrillSchedule>;
   /** Piper voice that reads drills' English cues. Absent: the practice player's default voice. */
   voice?: string;
@@ -247,6 +257,8 @@ export interface DrillPrefs {
 export interface DrillSessionLog {
   id: string;
   language: string;
+  /** The schedule it was a session of. Absent: the language's main one. */
+  schedule?: string;
   startedAt: number;
   endedAt: number;
   /** Passages reviewed or learned and phrases learned. A session with none doesn't count towards the schedule. */

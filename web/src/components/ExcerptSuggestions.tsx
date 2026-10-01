@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useDrillPrefs, useExcerptSuggestions, useNow, useRecentSessions } from "../hooks/useDrills";
 import { DEFAULT_SCHEDULE, formatMinutes } from "../lib/drill/labels";
 import { excerptMinutes, formatLearningTime, weeklyPace } from "../lib/drill/pace";
+import { logScheduleKey, scheduleForEpisode } from "../lib/drill/schedules";
 import { phraseSpan } from "../lib/drill/passages";
 import { drillOptions } from "../lib/drill/steps";
 import { suggestExcerpts } from "../lib/drill/store";
@@ -53,10 +54,12 @@ export function ExcerptSuggestionsSheet(props: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
-  const schedule = prefs?.schedules[language] ?? DEFAULT_SCHEDULE;
+  // Sized for the schedule this episode's excerpts are drilled on.
+  const key = scheduleForEpisode(prefs, language, props.existing);
+  const schedule = prefs?.schedules[key] ?? DEFAULT_SCHEDULE;
   const pace = weeklyPace(
     schedule,
-    (sessions ?? []).filter((l) => l.language === language),
+    (sessions ?? []).filter((l) => logScheduleKey(l, prefs) === key),
     drillOptions(schedule.learning, loadDefaultSettings(), schedule.answerTime ?? 0),
     now,
   );

@@ -1,6 +1,6 @@
 /**
  * Makes the English for upcoming drill sessions ahead of time, so they can start at once. Plans
- * each language's next session as it would run now and synthesises whatever English isn't stored
+ * each schedule's next session as it would run now and synthesises whatever English isn't stored
  * on the device yet. It only runs when the voice is already downloaded, a clip at a time, and
  * stops as soon as it's cancelled (its page going away), so it never holds up English that's
  * needed right now: the speech worker handles one request at a time.
@@ -15,14 +15,14 @@ let lastComplete = 0;
 /** Runs are chained, so a new one starts only once a cancelled one has let go of the worker. */
 let current: Promise<unknown> = Promise.resolve();
 
-async function run(uid: string, languages: string[], voiceId: string, cancelled: () => boolean): Promise<number> {
+async function run(uid: string, keys: string[], voiceId: string, cancelled: () => boolean): Promise<number> {
   if (cancelled() || Date.now() - lastComplete < MIN_GAP_MS) return 0;
   if (!(await isVoiceStored(voiceId))) return 0;
   let made = 0;
   let failed = false;
-  for (const language of languages) {
+  for (const key of keys) {
     if (cancelled()) return made;
-    const prepared = await prepareSession(uid, language, Date.now(), { withAudio: false }).catch(() => undefined);
+    const prepared = await prepareSession(uid, key, Date.now(), { withAudio: false }).catch(() => undefined);
     if (!prepared) failed = true;
     for (const text of prepared?.english ?? []) {
       if (cancelled()) return made;
@@ -39,19 +39,19 @@ async function run(uid: string, languages: string[], voiceId: string, cancelled:
 }
 
 /**
- * Prepares the English for the given languages' next sessions, in order. Returns how many clips it
+ * Prepares the English for the next sessions of the given schedules (by key), in order. Returns how many clips it
  * had to make. `force` skips the check for a recent run (after a session, say).
  */
 export function prefetchDrillEnglish(
   uid: string,
-  languages: string[],
+  keys: string[],
   voiceId: string,
   cancelled: () => boolean,
   force = false,
 ): Promise<number> {
   const next = current.then(() => {
     if (force) lastComplete = 0;
-    return run(uid, languages, voiceId, cancelled);
+    return run(uid, keys, voiceId, cancelled);
   });
   current = next.catch(() => 0);
   return next;

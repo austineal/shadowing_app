@@ -11,6 +11,7 @@ import { prepareSession, type Prepared } from "../lib/drill/prepare";
 import { DrillSession, type LearnBlock, type SessionEvent } from "../lib/drill/session";
 import { learnedPassage, reviewedPassage } from "../lib/drill/srs";
 import { cueSize, type DrillOptions, type SessionPhrase } from "../lib/drill/steps";
+import { scheduleLabel } from "../lib/drill/schedules";
 import { prepareDrillStudy, saveDrillProgress, startSessionLog, updateSessionLog } from "../lib/drill/store";
 import { formatTime } from "../lib/format";
 import { languageLabel } from "../lib/languages";
@@ -25,17 +26,19 @@ type Tally = Pick<DrillSessionLog, "reviewed" | "passed" | "learnedPhrases"> & {
 class Recorder {
   readonly tally: Tally = { reviewed: 0, passed: 0, learnedPhrases: 0, learnedPassages: 0, learnedCards: 0 };
   private logId: string | null = null;
-  /** All the language's excerpts, as they stand. */
+  /** All the schedule's excerpts, as they stand. */
   private readonly drills: Map<string, Drill>;
   private readonly uid: string;
   private readonly language: string;
+  private readonly key: string;
   private readonly schedule: DrillSchedule;
   private readonly opts: DrillOptions;
   private readonly onTally: (t: Tally) => void;
 
-  constructor(uid: string, language: string, prepared: Prepared, onTally: (t: Tally) => void) {
+  constructor(uid: string, prepared: Prepared, onTally: (t: Tally) => void) {
     this.uid = uid;
-    this.language = language;
+    this.language = prepared.language;
+    this.key = prepared.key;
     this.drills = new Map(prepared.drills.map((d) => [d.id, d]));
     this.schedule = prepared.schedule;
     this.opts = prepared.opts;
@@ -43,7 +46,7 @@ class Recorder {
   }
 
   start() {
-    this.logId ??= startSessionLog(this.uid, this.language, Date.now());
+    this.logId ??= startSessionLog(this.uid, this.language, this.key, Date.now());
   }
 
   /** Marks the session as still going (or just ended) now. */
@@ -138,27 +141,27 @@ function Shell({ title, children }: { title: string; children: React.ReactNode }
 }
 
 export default function DrillSessionPage({ uid }: { uid: string }) {
-  const { language = "" } = useParams();
-  return <SessionLoader key={language} uid={uid} language={language} />;
+  const { schedule = "" } = useParams();
+  return <SessionLoader key={schedule} uid={uid} scheduleKey={schedule} />;
 }
 
-function SessionLoader({ uid, language }: { uid: string; language: string }) {
+function SessionLoader({ uid, scheduleKey }: { uid: string; scheduleKey: string }) {
   const [prepared, setPrepared] = useState<Prepared>();
   const [error, setError] = useState<string>();
   /** Start a new passage even though its reviews won't fit in the coming week. */
   const [learnAnyway, setLearnAnyway] = useState(false);
   useEffect(() => {
     let cancelled = false;
-    prepareSession(uid, language, Date.now(), { learnAnyway }).then(
+    prepareSession(uid, scheduleKey, Date.now(), { learnAnyway }).then(
       (p) => !cancelled && setPrepared(p),
       (e) => !cancelled && setError(message(e)),
     );
     return () => {
       cancelled = true;
     };
-  }, [uid, language, learnAnyway]);
+  }, [uid, scheduleKey, learnAnyway]);
 
-  const title = `${languageLabel(language)} drill`;
+  const title = prepared ? `${scheduleLabel(prepared.key, prepared.schedule)} drill` : "Drill";
   if (error) {
     return (
       <Shell title={title}>
@@ -180,7 +183,6 @@ function SessionLoader({ uid, language }: { uid: string; language: string }) {
     <SessionView
       key={String(learnAnyway)}
       uid={uid}
-      language={language}
       prepared={prepared}
       onLearnAnyway={() => {
         setPrepared(undefined);
@@ -214,10 +216,10 @@ function phraseAt(phrases: SessionPhrase[], t: number): SessionPhrase {
   return found;
 }
 
-function SessionView(props: { uid: string; language: string; prepared: Prepared; onLearnAnyway: () => void }) {
-  const { uid, language, prepared } = props;
-  const { plan, opts } = prepared;
-  const title = `${languageLabel(language)} drill`;
+function SessionView(props: { uid: string; prepared: Prepared; onLearnAnyway: () => void }) {
+  const { uid, prepared } = props;
+  const { plan, opts, language } = prepared;
+  const title = `${scheduleLabel(prepared.key, prepared.schedule)} drill`;
   const voiceId = prepared.voice;
   const needsVoice = prepared.english.length > 0;
   const [voiceReady, setVoiceReady] = useState<boolean>();
@@ -226,7 +228,7 @@ function SessionView(props: { uid: string; language: string; prepared: Prepared;
   const [made, setMade] = useState(0);
   const [note, setNote] = useState<string>();
   const [tally, setTally] = useState<Tally>({ reviewed: 0, passed: 0, learnedPhrases: 0, learnedPassages: 0, learnedCards: 0 });
-  const [recorder] = useState(() => new Recorder(uid, language, prepared, setTally));
+  const [recorder] = useState(() => new Recorder(uid, prepared, setTally));
 
   useEffect(() => {
     if (!needsVoice) return;
@@ -299,11 +301,11 @@ function SessionView(props: { uid: string; language: string; prepared: Prepared;
   useEffect(() => {
     if (player.state !== "finished") return;
     let cancelled = false;
-    void prefetchDrillEnglish(uid, [language], voiceId, () => cancelled, true);
+    void prefetchDrillEnglish(uid, [prepared.key], voiceId, () => cancelled, true);
     return () => {
       cancelled = true;
     };
-  }, [player.state, uid, language, voiceId]);
+  }, [player.state, uid, prepared.key, voiceId]);
   useEffect(() => () => recorder.touch(), [recorder]);
 
   // Lock screen: what to do now.
@@ -348,12 +350,10 @@ function SessionView(props: { uid: string; language: string; prepared: Prepared;
   const reviews = plan.blocks.filter((b) => b.kind === "review" && !b.cards).length;
   const cardReviews = plan.blocks.reduce((n, b) => n + (b.kind === "review" && b.cards ? b.cards.length : 0), 0);
   const learning = plan.blocks.filter((b): b is LearnBlock => b.kind === "learn" && !b.cards);
-  // New cards by deck and lesson: "5 new cards from Sentence deck (Lesson 3)".
+  // New cards by deck: "5 new cards from Sentence deck".
   const newCards = new Map<string, number>();
   for (const b of plan.blocks) {
-    if (b.kind !== "learn" || !b.cards) continue;
-    const key = `${b.title}${b.passageTitle ? ` (${b.passageTitle})` : ""}`;
-    newCards.set(key, (newCards.get(key) ?? 0) + b.cards.length);
+    if (b.kind === "learn" && b.cards) newCards.set(b.title, (newCards.get(b.title) ?? 0) + b.cards.length);
   }
 
   return (
@@ -446,8 +446,9 @@ function SessionView(props: { uid: string; language: string; prepared: Prepared;
         <div className="section">
           {prepared.drills.length === 0 ? (
             <p>
-              No {languageLabel(language)} excerpt yet. Open an episode, tap <b>Drill</b> and choose the stretch you want to learn to
-              say.
+              {prepared.schedule.name ? "Nothing on this schedule yet" : `No ${languageLabel(language)} excerpt yet`}. Open an episode,
+              tap <b>Drill</b> and choose the stretch you want to learn to say
+              {prepared.schedule.name ? ", or move an excerpt here under Drill schedules" : ""}.
             </p>
           ) : (
             <p>
