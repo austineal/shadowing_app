@@ -72,7 +72,7 @@ export function overdueRatio(p: DrillPassage, now: number): number {
 
 /** A passage whose learning drill has just finished. */
 export function learnedPassage(p: DrillPassage, now: number): DrillPassage {
-  return { start: p.start, end: p.end, level: 0, due: dueAfter(0, now), last: now, reviews: 0, lapses: 0 };
+  return { ...p, level: 0, due: dueAfter(0, now), last: now, reviews: 0, lapses: 0 };
 }
 
 /**

@@ -9,7 +9,7 @@ import { DEFAULT_SCHEDULE, FREQUENCIES, SESSION_MINUTES, frequencyOf } from "../
 import { formatProgress, progressOf } from "../lib/drill/progress";
 import { dayNumber } from "../lib/drill/srs";
 import { drillVoice } from "../lib/drill/prepare";
-import { deleteDrill, setDrillVoice, setSchedule } from "../lib/drill/store";
+import { deleteDrill, setDrillVoice, setLessonLimit, setSchedule } from "../lib/drill/store";
 import { formatBytes, formatTime } from "../lib/format";
 import { languageLabel } from "../lib/languages";
 import { episodeLanguage } from "../lib/organise";
@@ -223,8 +223,32 @@ function ExcerptRow({ uid, drill }: { uid: string; drill: Drill }) {
       <div className="body">
         <Link to={`/episode/${drill.episodeId}`}>{drill.title ?? drill.episodeTitle}</Link>
         <div className="small muted">
-          {drill.title ? `${drill.episodeTitle} · ` : ""}
-          {formatTime(drill.start)}–{formatTime(drill.end)}
+          {drill.kind === "cards" ? (
+            <>
+              Deck · {drill.passages.length} cards
+              {drill.lessons && drill.lessons.length > 1 && (
+                <>
+                  {" · "}new cards from{" "}
+                  <select
+                    value={drill.lessonLimit ?? ""}
+                    onChange={(e) => void setLessonLimit(uid, drill.id, e.target.value === "" ? null : Number(e.target.value))}
+                  >
+                    <option value="">every lesson</option>
+                    {drill.lessons.map((l, i) => (
+                      <option key={i} value={i}>
+                        lessons up to {l}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              {drill.title ? `${drill.episodeTitle} · ` : ""}
+              {formatTime(drill.start)}–{formatTime(drill.end)}
+            </>
+          )}
         </div>
         <PassageMap drill={drill} now={now} />
         <div className="small muted">{formatProgress(progressOf([drill], now))}</div>
@@ -232,7 +256,8 @@ function ExcerptRow({ uid, drill }: { uid: string; drill: Drill }) {
       <button
         className="btn ghost small danger"
         onClick={() => {
-          if (confirm(`Stop drilling this excerpt of "${drill.episodeTitle}"? Its progress is deleted.`)) void deleteDrill(uid, drill.id);
+          const what = drill.kind === "cards" ? `the deck "${drill.episodeTitle}"` : `this excerpt of "${drill.episodeTitle}"`;
+          if (confirm(`Stop drilling ${what}? Its progress is deleted.`)) void deleteDrill(uid, drill.id);
         }}
       >
         Remove

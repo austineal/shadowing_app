@@ -467,7 +467,11 @@ function EpisodeRow({ ep, place, ctx }: { ep: Episode; place?: string; ctx: Tree
         <div className="meta">
           <StatusPill ep={ep} />
           {place ? <span>{place}</span> : null}
-          {ep.durationSec ? <span>{formatDuration(ep.durationSec)}</span> : null}
+          {ep.kind === "deck" && ep.cardCount ? (
+            <span>Deck · {ep.cardCount} cards</span>
+          ) : ep.durationSec ? (
+            <span>{formatDuration(ep.durationSec)}</span>
+          ) : null}
           <span>{formatDate(ep.createdAt?.toDate())}</span>
           {ctx.savedOffline(ep) && <span title="Saved on this device">✓ Offline</span>}
           {coverage && <DrillCoverage coverage={coverage} />}

@@ -78,8 +78,10 @@ export function transcriptMarks(phrases: { start: number; end: number }[], drill
     members.forEach((idx, i) => {
       const stage = passageStage(drill, i);
       const due = isDue(drill.passages[i], now);
-      idx.forEach((j, k) => marks.set(j, { drill, passage: i, stage, due, first: k === 0, learnedTo: false }));
+      // A deck's cards are coloured but not labelled: a label per card would be noise.
+      idx.forEach((j, k) => marks.set(j, { drill, passage: i, stage, due, first: k === 0 && drill.kind !== "cards", learnedTo: false }));
     });
+    if (drill.kind === "cards") continue;
     // Learned up to here: partway through the passage being learned, else the end of the last learned one.
     const f = frontier(drill);
     if (f < 0) continue;

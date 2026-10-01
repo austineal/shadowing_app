@@ -112,7 +112,7 @@ function TodayRow({ row, now }: { row: Row; now: number }) {
   const detail =
     row.excerpts === 0
       ? "No excerpt yet: open an episode and tap Drill"
-      : [due ? `${due} ${due === 1 ? "passage" : "passages"} to review` : "", learning ? `learning ${learning.title ?? learning.episodeTitle}` : ""]
+      : [due ? `${due} to review` : "", learning ? `learning ${learning.title ?? learning.episodeTitle}` : ""]
           .filter(Boolean)
           .join(" · ") || "All caught up";
   const perDay = schedule.everyDays <= 1 && schedule.perDay > 1;
