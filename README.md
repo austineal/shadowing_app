@@ -5,6 +5,9 @@ podcast phrase by phrase and repeating each phrase aloud. Runs in the browser on
 desktop and installs to the Android home screen from Chrome.
 
 - Import audio by uploading a file or picking an episode from a podcast RSS feed.
+- Variable-bitrate MP3s are re-encoded at a constant 128 kbps before transcription.
+  Browsers seek in VBR MP3s using a coarse table that can land tens of seconds from
+  the requested time, so phrases would play the wrong audio; CBR seeks are exact.
 - Audio is transcribed with word timestamps by ElevenLabs speech-to-text, or, if
   you supply a transcript, that transcript is aligned to the recognised speech so
   your wording inherits the timestamps.

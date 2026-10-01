@@ -1,10 +1,12 @@
 import { onObjectFinalized } from "firebase-functions/v2/storage";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { randomUUID } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
 import { db, bucket } from "./admin.js";
 import { REGION, elevenLabsApiKey, scribeModelId } from "./config.js";
 import { transcribeAudio } from "./elevenlabs.js";
+import { isVbrMp3, toCbrMp3 } from "./normalize.js";
 import { assertAllowed } from "./auth.js";
 
 const AUDIO_PATH_RE = /^users\/([^/]+)\/episodes\/([^/]+)\/audio\.([A-Za-z0-9]+)$/;
@@ -40,9 +42,25 @@ export async function runTranscription(uid: string, episodeId: string, audioPath
   try {
     const file = bucket.file(audioPath);
     const [meta] = await file.getMetadata();
-    const contentType = (meta.contentType as string | undefined) ?? "audio/mpeg";
+    let contentType = (meta.contentType as string | undefined) ?? "audio/mpeg";
     logger.info("Downloading audio", { audioPath, size: meta.size, contentType });
-    const [audio] = await file.download();
+    let [audio] = await file.download();
+
+    if (isVbrMp3(audio)) {
+      // Replace the file before transcribing so the timings come from the audio that is played.
+      // Rewriting it re-fires the upload trigger, which skips because this run holds the claim.
+      // A new download token gives it a new URL, so no stale copy is served from the offline cache.
+      const started = Date.now();
+      audio = await toCbrMp3(audio);
+      contentType = "audio/mpeg";
+      await file.save(audio, {
+        contentType,
+        resumable: false,
+        metadata: { metadata: { ...meta.metadata, firebaseStorageDownloadTokens: randomUUID() } },
+      });
+      await ref.update({ audioUrl: FieldValue.delete() });
+      logger.info("Re-encoded VBR MP3 as CBR", { ms: Date.now() - started, bytes: audio.length });
+    }
 
     const language: string | undefined =
       claimed.language && claimed.language !== "auto" ? claimed.language : undefined;
