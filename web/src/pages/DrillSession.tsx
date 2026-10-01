@@ -8,7 +8,7 @@ import { CUE_LABEL, REVIEW_LABEL, formatDay, formatMinutes, formatNext } from ".
 import { frontier } from "../lib/drill/plan";
 import { prefetchDrillEnglish } from "../lib/drill/prefetch";
 import { prepareSession, type Prepared } from "../lib/drill/prepare";
-import { DrillSession, type SessionEvent } from "../lib/drill/session";
+import { DrillSession, type LearnBlock, type SessionEvent } from "../lib/drill/session";
 import { learnedPassage, reviewedPassage } from "../lib/drill/srs";
 import { cueSize, type DrillOptions, type SessionPhrase } from "../lib/drill/steps";
 import { prepareDrillStudy, saveDrillProgress, startSessionLog, updateSessionLog } from "../lib/drill/store";
@@ -19,11 +19,11 @@ import type { Drill, DrillSchedule, DrillSessionLog } from "../types";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-type Tally = Pick<DrillSessionLog, "reviewed" | "passed" | "learnedPhrases"> & { learnedPassages: number };
+type Tally = Pick<DrillSessionLog, "reviewed" | "passed" | "learnedPhrases"> & { learnedPassages: number; learnedCards: number };
 
 /** Saves each passage's result as the session reports it, and keeps the session log up to date. */
 class Recorder {
-  readonly tally: Tally = { reviewed: 0, passed: 0, learnedPhrases: 0, learnedPassages: 0 };
+  readonly tally: Tally = { reviewed: 0, passed: 0, learnedPhrases: 0, learnedPassages: 0, learnedCards: 0 };
   private logId: string | null = null;
   /** All the language's excerpts, as they stand. */
   private readonly drills: Map<string, Drill>;
@@ -55,6 +55,10 @@ class Recorder {
     const now = Date.now();
     const d = this.drills.get(e.block.drillId);
     if (!d) return;
+    if (e.block.cards) {
+      this.cardsEvent(d, e, now);
+      return;
+    }
     const i = e.block.passage;
     const passages = [...d.passages];
     let next: Drill;
@@ -80,7 +84,39 @@ class Recorder {
       add.learnedSeconds = Math.round(passages[i].end - passages[i].start);
       this.tally.learnedPassages++;
     }
-    this.drills.set(d.id, next);
+    this.save(next, add, now);
+  }
+
+  /** A set of cards: each card reviewed or learned on its own account. */
+  private cardsEvent(d: Drill, e: SessionEvent, now: number) {
+    const cards = e.block.cards!;
+    const passages = [...d.passages];
+    const add: Partial<DrillSessionLog> = { progress: cards.length };
+    if (e.kind === "reviewed") {
+      const others = [...this.drills.values()].flatMap((x) => x.passages.filter((_, j) => x.id !== d.id || !cards.includes(j)));
+      const booked = bookedByDay(others, this.schedule, now, this.opts);
+      let passed = 0;
+      cards.forEach((i, k) => {
+        const ok = !e.missed.includes(k);
+        const spread = spreadReviews(booked, this.schedule, passages[i].end - passages[i].start, this.opts, true);
+        passages[i] = reviewedPassage(passages[i], ok, now, spread);
+        if (ok) passed++;
+      });
+      add.reviewed = cards.length;
+      add.passed = passed;
+      this.tally.reviewed += cards.length;
+      this.tally.passed += passed;
+    } else if (e.kind === "learned") {
+      for (const i of cards) passages[i] = learnedPassage(passages[i], now);
+      add.learnedPhrases = cards.length;
+      add.learnedSeconds = Math.round(cards.reduce((sum, i) => sum + passages[i].end - passages[i].start, 0));
+      this.tally.learnedCards += cards.length;
+    } else return;
+    this.save({ ...d, passages }, add, now);
+  }
+
+  private save(next: Drill, add: Partial<DrillSessionLog>, now: number) {
+    this.drills.set(next.id, next);
     saveDrillProgress(this.uid, next);
     if (this.logId) updateSessionLog(this.uid, this.logId, now, add);
     this.onTally({ ...this.tally });
@@ -189,7 +225,7 @@ function SessionView(props: { uid: string; language: string; prepared: Prepared;
   const [clips, setClips] = useState<Map<string, AudioBuffer> | undefined>(() => (needsVoice ? undefined : new Map()));
   const [made, setMade] = useState(0);
   const [note, setNote] = useState<string>();
-  const [tally, setTally] = useState<Tally>({ reviewed: 0, passed: 0, learnedPhrases: 0, learnedPassages: 0 });
+  const [tally, setTally] = useState<Tally>({ reviewed: 0, passed: 0, learnedPhrases: 0, learnedPassages: 0, learnedCards: 0 });
   const [recorder] = useState(() => new Recorder(uid, language, prepared, setTally));
 
   useEffect(() => {
@@ -309,8 +345,16 @@ function SessionView(props: { uid: string; language: string; prepared: Prepared;
   }, [started, player]);
 
   const now = useNow(started && player.state === "playing" ? 1000 : 60_000);
-  const reviews = plan.blocks.filter((b) => b.kind === "review").length;
-  const learning = plan.blocks.filter((b) => b.kind === "learn");
+  const reviews = plan.blocks.filter((b) => b.kind === "review" && !b.cards).length;
+  const cardReviews = plan.blocks.reduce((n, b) => n + (b.kind === "review" && b.cards ? b.cards.length : 0), 0);
+  const learning = plan.blocks.filter((b): b is LearnBlock => b.kind === "learn" && !b.cards);
+  // New cards by deck and lesson: "5 new cards from WaniKani sentences (Level 3)".
+  const newCards = new Map<string, number>();
+  for (const b of plan.blocks) {
+    if (b.kind !== "learn" || !b.cards) continue;
+    const key = `${b.title}${b.passageTitle ? ` (${b.passageTitle})` : ""}`;
+    newCards.set(key, (newCards.get(key) ?? 0) + b.cards.length);
+  }
 
   return (
     <div className="page drill">
@@ -338,7 +382,8 @@ function SessionView(props: { uid: string; language: string; prepared: Prepared;
           <p>
             {tally.reviewed > 0 && `${tally.reviewed} reviewed, ${tally.passed} passed. `}
             {tally.learnedPhrases > 0 && `${tally.learnedPhrases} new ${tally.learnedPhrases === 1 ? "phrase" : "phrases"}. `}
-            {tally.learnedPassages > 0 && `${tally.learnedPassages} ${tally.learnedPassages === 1 ? "passage" : "passages"} learned.`}
+            {tally.learnedPassages > 0 && `${tally.learnedPassages} ${tally.learnedPassages === 1 ? "passage" : "passages"} learned. `}
+            {tally.learnedCards > 0 && `${tally.learnedCards} new ${tally.learnedCards === 1 ? "card" : "cards"}.`}
           </p>
           <Link to="/" className="btn primary">
             Back to the library
@@ -355,9 +400,17 @@ function SessionView(props: { uid: string; language: string; prepared: Prepared;
               </div>
             )}
             <div className="drill-block small muted">
-              {cur.block.kind === "review" ? REVIEW_LABEL[cueSize(cur.block.level)] : "Learning"} · {cur.block.title} · passage{" "}
-              {cur.block.passage + 1} of{" "}
-              {cur.block.passageCount}
+              {cur.block.cards ? (
+                <>
+                  {cur.block.kind === "review" ? "Reviewing cards" : "New cards"} · {cur.block.title} · {cur.unitIndex + 1} of{" "}
+                  {cur.unitCount}
+                </>
+              ) : (
+                <>
+                  {cur.block.kind === "review" ? REVIEW_LABEL[cueSize(cur.block.level)] : "Learning"} · {cur.block.title} · passage{" "}
+                  {cur.block.passage + 1} of {cur.block.passageCount}
+                </>
+              )}
               {cur.block.passageTitle && <div className="drill-passage-title">{cur.block.passageTitle}</div>}
             </div>
             <div className={`drill-cue cue-${cur.step.cue}`}>{cur.step.label ?? CUE_LABEL[cur.step.cue]}</div>
@@ -419,6 +472,17 @@ function SessionView(props: { uid: string; language: string; prepared: Prepared;
                 {plan.deferred > 0 && <span className="muted"> ({plan.deferred} more wait for a later session)</span>}
               </li>
             )}
+            {cardReviews > 0 && (
+              <li>
+                Review {cardReviews} {cardReviews === 1 ? "card" : "cards"}
+                {reviews === 0 && plan.deferred > 0 && <span className="muted"> ({plan.deferred} more wait for a later session)</span>}
+              </li>
+            )}
+            {[...newCards].map(([what, n]) => (
+              <li key={what}>
+                Learn {n} new {n === 1 ? "card" : "cards"} from {what}
+              </li>
+            ))}
             {learning.map((b) => (
               <li key={`${b.drillId}-${b.passage}`}>
                 Learn {b.passageTitle ? `“${b.passageTitle}” from ` : ""}

@@ -25,6 +25,8 @@ import { mergeSegments, segmentTokens, splitSegment } from "../lib/segmenter";
 import { episodeSettings, loadDefaultSettings, saveDefaultSettings } from "../lib/settings";
 import { useOnline } from "../lib/offline";
 import { ExcerptPicker } from "../components/ExcerptPicker";
+import { DeckDrill } from "../components/DeckDrill";
+import { buildDeck } from "../lib/deck";
 import { ExcerptSuggestionsSheet } from "../components/ExcerptSuggestions";
 import { OfflineButton } from "../components/OfflineButton";
 import { PassageLabel } from "../components/PassageMap";
@@ -86,7 +88,7 @@ function StatusView({ episode }: { episode: Episode }) {
     setBusy(true);
     setMsg(undefined);
     try {
-      const r = await retranscribe(episode.id);
+      const r = episode.kind === "deck" ? await buildDeck(episode.id) : await retranscribe(episode.id);
       if (r.status === "error") setMsg(r.error ?? "Failed again.");
     } catch (e) {
       setMsg(e instanceof Error ? e.message : String(e));
@@ -99,17 +101,17 @@ function StatusView({ episode }: { episode: Episode }) {
       <div className="center" style={{ flex: 1 }}>
         {episode.status === "error" ? (
           <>
-            <p className="error">Transcription failed</p>
+            <p className="error">{episode.kind === "deck" ? "Building the deck failed" : "Transcription failed"}</p>
             <p className="small muted" style={{ maxWidth: 480 }}>{episode.error}</p>
             <button className="btn primary" disabled={busy} onClick={() => void retry()}>
-              {busy ? "Retrying…" : "Retry transcription"}
+              {busy ? "Retrying…" : episode.kind === "deck" ? "Try again" : "Retry transcription"}
             </button>
             {msg && <p className="error small">{msg}</p>}
           </>
         ) : (
           <>
             <div className="spinner" />
-            <p>{episode.status === "transcribing" ? "Transcribing…" : "Uploading…"}</p>
+            <p>{episode.status === "transcribing" ? (episode.kind === "deck" ? "Building the deck…" : "Transcribing…") : "Uploading…"}</p>
             <p className="small muted">
               Long episodes can take a few minutes. You can leave this page; it will be ready when you come back.
             </p>
@@ -185,6 +187,7 @@ async function generateSegments(uid: string, episode: Episode, settings: Practic
 function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDoc: SegmentsDoc }) {
   const segments = segDoc.segments;
   const language = effectiveLanguage(episode);
+  const isDeck = episode.kind === "deck";
   const charBased = isCharBased(language);
 
   const [settings, setSettings] = useState<PracticeSettings>(() => episodeSettings(episode.settings));
@@ -199,7 +202,9 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
   const [picking, setPicking] = useState<{ first?: number; last?: number; title?: string } | null>(() =>
     searchParams.get("drill") && language !== "auto" ? {} : null,
   );
-  const [suggesting, setSuggesting] = useState(() => searchParams.get("drill") === "suggest" && language !== "auto");
+  const [suggesting, setSuggesting] = useState(() => searchParams.get("drill") === "suggest" && language !== "auto" && !isDeck);
+  /** The deck's drill sheet is open (decks are drilled whole, card by card, rather than by excerpt). */
+  const [deckDrilling, setDeckDrilling] = useState(false);
   const [tokens, setTokens] = useState<TimedToken[] | null>(null);
   const [busy, setBusy] = useState<string>();
   const [notice, setNotice] = useState<string>();
@@ -387,6 +392,11 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
     if (searchParams.has("drill")) setSearchParams({}, { replace: true });
   };
   const togglePicking = () => {
+    if (isDeck) {
+      player.stop();
+      setDeckDrilling((v) => !v);
+      return;
+    }
     if (picking) {
       stopPicking();
       return;
@@ -412,7 +422,7 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
           <h1>{episode.title}</h1>
           <div className="sub">
             {!online && <span className="pill busy" style={{ marginRight: 6 }}>Offline</span>}
-            {languageLabel(language)} · {segments.length} phrases
+            {languageLabel(language)} · {segments.length} {isDeck ? "cards" : "phrases"}
             {segDoc.source === "transcript" && segDoc.matchRatio !== undefined
               ? ` · transcript ${Math.round(segDoc.matchRatio * 100)}% matched`
               : ""}
@@ -420,22 +430,24 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
         </div>
         {language !== "auto" && (
           <button
-            className={`btn small ${picking ? "primary" : ""}`}
+            className={`btn small ${picking || deckDrilling ? "primary" : ""}`}
             onClick={togglePicking}
-            title="Choose an excerpt to learn to say from its English"
+            title={isDeck ? "Learn to say the cards from their English" : "Choose an excerpt to learn to say from its English"}
           >
             Drill
           </button>
         )}
-        <button
-          className={`btn small ${editing ? "primary" : ""}`}
-          onClick={() => {
-            setPicking(null);
-            setEditing((v) => !v);
-          }}
-        >
-          {editing ? "Done" : "Edit"}
-        </button>
+        {!isDeck && (
+          <button
+            className={`btn small ${editing ? "primary" : ""}`}
+            onClick={() => {
+              setPicking(null);
+              setEditing((v) => !v);
+            }}
+          >
+            {editing ? "Done" : "Edit"}
+          </button>
+        )}
         <button className="btn ghost icon" aria-label="Settings" onClick={() => setShowSettings(true)}>
           ⚙
         </button>
@@ -446,6 +458,11 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
           const mark = marks.get(i);
           return (
             <Fragment key={s.id}>
+              {isDeck && s.lesson && s.lesson !== segments[i - 1]?.lesson && (
+                <div className="passage-label">
+                  <b>{s.lesson}</b>
+                </div>
+              )}
               {mark?.first && <PassageLabel mark={mark} />}
               <div className="seg-row">
                 <button
@@ -485,7 +502,16 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
       </div>
 
       <div className="dock">
-        {picking ? (
+        {deckDrilling ? (
+          <DeckDrill
+            uid={uid}
+            episode={episode}
+            language={language}
+            segments={segments}
+            drill={episodeDrills.find((d) => d.kind === "cards")}
+            onClose={() => setDeckDrilling(false)}
+          />
+        ) : picking ? (
           <ExcerptPicker
             uid={uid}
             episode={episode}
@@ -510,7 +536,9 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
             <div className={`phrase ${player.phase === "gap" ? "gap" : ""}`}>
               {current ? current.text : "—"}
             </div>
-            {settings.showTranslation && currentStudy && <div className="translation">{currentStudy.translation}</div>}
+            {settings.showTranslation && (currentStudy?.translation ?? current?.english) && (
+              <div className="translation">{currentStudy?.translation ?? current?.english}</div>
+            )}
             <div className="progress">
               <div style={{ width: `${Math.round(player.progress * 100)}%` }} />
             </div>
@@ -704,49 +732,53 @@ function SettingsSheet(props: {
           </p>
         </div>
 
-        <hr />
-        <div className="slider">
-          <div className="row">
-            <span>Maximum phrase length</span>
-            <span className="muted">{maxPhrase} s</span>
-          </div>
-          <input type="range" min={3} max={20} step={1} value={maxPhrase} onChange={(e) => setMaxPhrase(Number(e.target.value))} />
-          <div className="row" style={{ marginTop: 6 }}>
-            <button
-              className="btn small"
-              disabled={props.busy !== undefined || maxPhrase === props.segDoc.maxPhraseSec}
-              onClick={() => {
-                onChange({ ...settings, maxPhraseSec: maxPhrase });
-                props.onRegenerate(maxPhrase);
-              }}
-            >
-              {props.busy === "regen" ? "Rebuilding…" : "Rebuild phrases"}
-            </button>
-            <span className="small muted">Currently built with {props.segDoc.maxPhraseSec} s max.</span>
-          </div>
-        </div>
+        {props.episode.kind !== "deck" && (
+          <>
+            <hr />
+            <div className="slider">
+              <div className="row">
+                <span>Maximum phrase length</span>
+                <span className="muted">{maxPhrase} s</span>
+              </div>
+              <input type="range" min={3} max={20} step={1} value={maxPhrase} onChange={(e) => setMaxPhrase(Number(e.target.value))} />
+              <div className="row" style={{ marginTop: 6 }}>
+                <button
+                  className="btn small"
+                  disabled={props.busy !== undefined || maxPhrase === props.segDoc.maxPhraseSec}
+                  onClick={() => {
+                    onChange({ ...settings, maxPhraseSec: maxPhrase });
+                    props.onRegenerate(maxPhrase);
+                  }}
+                >
+                  {props.busy === "regen" ? "Rebuilding…" : "Rebuild phrases"}
+                </button>
+                <span className="small muted">Currently built with {props.segDoc.maxPhraseSec} s max.</span>
+              </div>
+            </div>
 
-        <hr />
-        <div className="row" style={{ justifyContent: "space-between" }}>
-          <span>
-            Text source: <b>{props.segDoc.source === "transcript" ? "your transcript" : "speech recognition"}</b>
-          </span>
-          <button className="btn small" onClick={() => setShowTranscript((v) => !v)}>
-            {props.episode.transcriptPath ? "Replace transcript" : "Attach transcript"}
-          </button>
-        </div>
-        {showTranscript && (
-          <div style={{ marginTop: 10 }}>
-            <textarea className="input" value={transcript} onChange={(e) => setTranscript(e.target.value)} placeholder="Paste the transcript text" />
-            <button
-              className="btn primary small"
-              style={{ marginTop: 8 }}
-              disabled={!transcript.trim() || props.busy !== undefined}
-              onClick={() => props.onAttachTranscript(transcript)}
-            >
-              {props.busy === "transcript" ? "Aligning…" : "Align and rebuild phrases"}
-            </button>
-          </div>
+            <hr />
+            <div className="row" style={{ justifyContent: "space-between" }}>
+              <span>
+                Text source: <b>{props.segDoc.source === "transcript" ? "your transcript" : "speech recognition"}</b>
+              </span>
+              <button className="btn small" onClick={() => setShowTranscript((v) => !v)}>
+                {props.episode.transcriptPath ? "Replace transcript" : "Attach transcript"}
+              </button>
+            </div>
+            {showTranscript && (
+              <div style={{ marginTop: 10 }}>
+                <textarea className="input" value={transcript} onChange={(e) => setTranscript(e.target.value)} placeholder="Paste the transcript text" />
+                <button
+                  className="btn primary small"
+                  style={{ marginTop: 8 }}
+                  disabled={!transcript.trim() || props.busy !== undefined}
+                  onClick={() => props.onAttachTranscript(transcript)}
+                >
+                  {props.busy === "transcript" ? "Aligning…" : "Align and rebuild phrases"}
+                </button>
+              </div>
+            )}
+          </>
         )}
 
         <hr />

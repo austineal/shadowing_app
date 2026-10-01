@@ -10,6 +10,9 @@ export interface Episode {
   status: EpisodeStatus;
   error?: string;
   source: "upload" | "rss";
+  /** "deck": a deck of audio flashcards joined into one audio file, a card per segment (see buildDeck). */
+  kind?: "deck";
+  cardCount?: number;
   sourceUrl?: string | null;
   feedTitle?: string | null;
   /** RSS feed the episode was imported from; groups episodes by show in the library. */
@@ -181,6 +184,15 @@ export interface Drill {
   passages: DrillPassage[];
   /** The passage being learned and how many of its phrases are done, so learning can resume next session. */
   learning?: { passage: number; phrases: number } | null;
+  /**
+   * "cards": a deck drilled card by card, each card a passage of one phrase. The passages are in
+   * the order they're learned (lesson by lesson, shuffled within each), reviewed in shuffled rounds.
+   */
+  kind?: "cards";
+  /** Cards: the deck's lessons in order; each passage's `lesson` indexes this. */
+  lessons?: string[];
+  /** Cards: new cards come from lessons up to this index only (absent or null: all of them). */
+  lessonLimit?: number | null;
   /** When the excerpt was chosen (ms since epoch). */
   createdAt: number;
 }
@@ -203,6 +215,10 @@ export interface DrillPassage {
   last?: number;
   reviews?: number;
   lapses?: number;
+  /** A card of a deck rather than a stretch of an episode (see Drill.kind). */
+  card?: boolean;
+  /** Cards: index into the drill's lessons. */
+  lesson?: number;
 }
 
 /** How often a language's drill sessions come up. Stored per language in users/{uid}/prefs/drill. */
@@ -280,13 +296,18 @@ export interface Segment {
   start: number;
   end: number;
   text: string;
+  /** Deck cards: the English from the deck, where its English audio lies, and the card's lesson. */
+  english?: string;
+  enStart?: number;
+  enEnd?: number;
+  lesson?: string;
 }
 
 export interface SegmentsDoc {
   segments: Segment[];
   /** Where the text came from. */
-  source: "asr" | "transcript";
-  /** Storage path of the TimedToken[] the segments were built from (words.json or aligned.json). */
+  source: "asr" | "transcript" | "deck";
+  /** Storage path of the TimedToken[] the segments were built from (words.json or aligned.json); empty for a deck. */
   tokensPath: string;
   /** Fraction of user-transcript tokens matched to recognised speech (transcript source only). */
   matchRatio?: number;

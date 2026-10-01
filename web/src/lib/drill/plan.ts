@@ -3,14 +3,20 @@
  * first, then put back into story order), then new material from the excerpt being learned. New
  * material only starts once every due review fits, and learning can stop partway through a
  * passage and pick up next session, so sessions don't end early.
+ *
+ * Decks are drilled card by card: due cards are reviewed in shuffled rounds, and new cards are
+ * learned a few at a time. When a language has both an excerpt and a deck to learn from, the deck
+ * gets up to half of the time left for new material.
  */
 import type { Drill, DrillPassage } from "../../types";
-import { bookNewPassage, forecastLoad, overfilledBy, type LoadDay, type SessionDay } from "./forecast";
+import { CARD_ROUND, bookNewPassage, forecastLoad, overfilledBy, type LoadDay, type SessionDay } from "./forecast";
 import { phraseBefore, phrasesIn } from "./passages";
 import {
   blockSeconds,
+  blockUnits,
   learnGroupSeconds,
   openingSeconds,
+  unitsSeconds,
   wrapUpSeconds,
   type Block,
   type LearnBlock,
@@ -36,6 +42,8 @@ export interface PlanInput {
    * starts if its reviews will fit in them over the coming week.
    */
   upcoming?: SessionDay[];
+  /** Shuffles cards; Math.random unless given (for tests). */
+  random?: () => number;
 }
 
 export interface SessionPlan {
@@ -52,9 +60,71 @@ export interface SessionPlan {
 export const passagePhrases = (d: PlanDrill, i: number) =>
   phrasesIn(d.phrases, d.drill.passages[i].start, d.drill.passages[i].end);
 
-/** Index of the first passage not yet learned, or -1 when the excerpt is fully learned. */
+/** New cards learned together, then tested together. */
+export const CARD_BATCH = 5;
+/** A deck's share of the time for new material when an excerpt is being learned too. */
+const CARD_SHARE = 0.5;
+
+const isCards = (d: PlanDrill) => d.drill.kind === "cards";
+
+/** Whether a deck's card is in a lesson it may learn from yet (see Drill.lessonLimit). */
+const unlocked = (drill: Drill, i: number) => drill.lessonLimit == null || (drill.passages[i].lesson ?? 0) <= drill.lessonLimit;
+
+/**
+ * Index of the first passage not yet learned, or -1 when the excerpt is fully learned (or, for a
+ * deck, when the next card is past the lessons it may learn from).
+ */
 export function frontier(drill: Drill): number {
-  return drill.passages.findIndex((p) => !isLearned(p));
+  const i = drill.passages.findIndex((p) => !isLearned(p));
+  return i >= 0 && !unlocked(drill, i) ? -1 : i;
+}
+
+function shuffled<T>(xs: T[], random: () => number): T[] {
+  const out = [...xs];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+/** A deck's cards as one block: each card's phrase, in the order given, tested in a shuffled order. */
+function cardsBase(d: PlanDrill, cards: number[], random: () => number) {
+  const lesson = d.drill.passages[cards[0]].lesson;
+  return {
+    drillId: d.drill.id,
+    episodeId: d.drill.episodeId,
+    title: d.drill.title ?? d.drill.episodeTitle,
+    passageTitle: lesson === undefined ? undefined : d.drill.lessons?.[lesson],
+    passage: cards[0],
+    passageCount: d.drill.passages.length,
+    phrases: cards.map((i) => passagePhrases(d, i)[0]),
+    cards,
+    order: shuffled(
+      cards.map((_, k) => k),
+      random,
+    ),
+  };
+}
+
+function cardReviewBlock(d: PlanDrill, cards: number[], random: () => number): ReviewBlock {
+  // One answer time for the round: the least practised card's.
+  const level = Math.min(...cards.map((i) => d.drill.passages[i].level ?? 0));
+  return { kind: "review", ...cardsBase(d, cards, random), level };
+}
+
+function cardLearnBlock(d: PlanDrill, cards: number[], random: () => number): LearnBlock {
+  return { kind: "learn", ...cardsBase(d, cards, random), from: 0, to: cards.length, wrapUp: true };
+}
+
+/** A card's share of a review round: its test, and its part of the round's announcement. */
+function cardReviewSeconds(d: PlanDrill, i: number, opts: DrillOptions): number {
+  const block = cardReviewBlock(d, [i], Math.random);
+  const units = blockUnits(block, opts);
+  return (
+    unitsSeconds(block, units.filter((u) => u.kind !== "announce"), opts) +
+    unitsSeconds(block, units.filter((u) => u.kind === "announce"), opts) / CARD_ROUND
+  );
 }
 
 /** The excerpt new material comes from: one already under way, otherwise the oldest unfinished one. */
@@ -85,6 +155,7 @@ function reviewBlock(d: PlanDrill, i: number, withLeadIn: boolean): ReviewBlock 
 
 export function planSession(input: PlanInput): SessionPlan {
   const { now, budgetSec, opts } = input;
+  const random = input.random ?? Math.random;
 
   const due: { d: PlanDrill; i: number; risk: number }[] = [];
   for (const d of input.drills) {
@@ -97,7 +168,7 @@ export function planSession(input: PlanInput): SessionPlan {
   let seconds = 0;
   const picked: typeof due = [];
   for (const item of due) {
-    const sec = blockSeconds(reviewBlock(item.d, item.i, true), opts);
+    const sec = isCards(item.d) ? cardReviewSeconds(item.d, item.i, opts) : blockSeconds(reviewBlock(item.d, item.i, true), opts);
     if (picked.length > 0 && seconds + sec > budgetSec) continue;
     picked.push(item);
     seconds += sec;
@@ -110,21 +181,54 @@ export function planSession(input: PlanInput): SessionPlan {
     const prev = blocks[blocks.length - 1];
     return !!prev && prev.drillId === drillId && prev.passage === i - 1;
   };
+  const decks = new Set<PlanDrill>();
   for (const d of new Set(picked.map((x) => x.d))) {
+    if (isCards(d)) {
+      decks.add(d);
+      continue;
+    }
     for (const item of picked.filter((x) => x.d === d).sort((a, b) => a.i - b.i)) {
       blocks.push(reviewBlock(d, item.i, !follows(d.drill.id, item.i)));
     }
   }
+  // Due cards after the passages, shuffled, in rounds.
+  for (const d of decks) {
+    const cards = shuffled(
+      picked.filter((x) => x.d === d).map((x) => x.i),
+      random,
+    );
+    for (let k = 0; k < cards.length; k += CARD_ROUND) blocks.push(cardReviewBlock(d, cards.slice(k, k + CARD_ROUND), random));
+  }
   seconds = blocks.reduce((sum, b) => sum + blockSeconds(b, opts), 0);
 
-  const learner = input.newMaterial && picked.length === due.length ? learningDrill(input.drills) : undefined;
+  const allDue = input.newMaterial && picked.length === due.length;
+  const learner = allDue ? learningDrill(input.drills.filter((d) => !isCards(d))) : undefined;
+  const deck = allDue ? learningDrill(input.drills.filter(isCards)) : undefined;
   let heldBack: LoadDay | undefined;
-  if (learner) {
+  if (learner || deck) {
     // The reviews booked once this session's are done, to check new passages against.
     const load = input.upcoming && forecastLoad(passagesAfter(input.drills, blocks, now), input.upcoming, now, opts);
-    const learned = planLearning(learner, blocks, budgetSec - seconds, opts, now, load);
-    seconds += learned.used;
-    heldBack = learned.heldBack;
+    // The deck takes its share first, the excerpt what's left, then the deck any time still over.
+    const cardBlocks: Block[] = [];
+    let next: number | undefined;
+    if (deck) {
+      const share = (budgetSec - seconds) * (learner ? CARD_SHARE : 1);
+      const learned = planCardLearning(deck, cardBlocks, share, opts, now, random, load);
+      seconds += learned.used;
+      heldBack = learned.heldBack;
+      next = learned.next;
+    }
+    if (learner) {
+      const learned = planLearning(learner, blocks, budgetSec - seconds, opts, now, load);
+      seconds += learned.used;
+      heldBack ??= learned.heldBack;
+    }
+    if (deck && learner && next !== undefined && !heldBack) {
+      const learned = planCardLearning(deck, cardBlocks, budgetSec - seconds, opts, now, random, load, next);
+      seconds += learned.used;
+      heldBack = learned.heldBack;
+    }
+    blocks.push(...cardBlocks);
   }
 
   return { blocks, seconds, due: due.length, deferred: due.length - picked.length, ...(heldBack ? { heldBack } : {}) };
@@ -134,7 +238,9 @@ export function planSession(input: PlanInput): SessionPlan {
 function passagesAfter(drills: PlanDrill[], blocks: Block[], now: number): DrillPassage[] {
   return drills.flatMap((d) =>
     d.drill.passages.map((p, i) =>
-      blocks.some((b) => b.kind === "review" && b.drillId === d.drill.id && b.passage === i) ? reviewedPassage(p, true, now) : p,
+      blocks.some((b) => b.kind === "review" && b.drillId === d.drill.id && (b.cards ? b.cards.includes(i) : b.passage === i))
+        ? reviewedPassage(p, true, now)
+        : p,
     ),
   );
 }
@@ -198,6 +304,56 @@ function planLearning(
     from = 0;
   }
   return { used };
+}
+
+/**
+ * Adds blocks of new cards from deck `d` that fit in `budget` seconds, CARD_BATCH at a time in
+ * the deck's order, starting from its first card not learned (or `from`). Returns the time they
+ * take and where to carry on, or with a `load`, `heldBack` once a card's reviews wouldn't fit.
+ */
+function planCardLearning(
+  d: PlanDrill,
+  blocks: Block[],
+  budget: number,
+  opts: DrillOptions,
+  now: number,
+  random: () => number,
+  load?: LoadDay[],
+  from?: number,
+): { used: number; next?: number; heldBack?: LoadDay } {
+  const ps = d.drill.passages;
+  const learnable = (j: number) => j < ps.length && !isLearned(ps[j]) && unlocked(d.drill, j) && passagePhrases(d, j).length > 0;
+  let used = 0;
+  let heldBack: LoadDay | undefined;
+  let i = from ?? frontier(d.drill);
+  while (i >= 0 && learnable(i)) {
+    const batch: number[] = [];
+    for (let j = i; batch.length < CARD_BATCH && learnable(j); j++) batch.push(j);
+    let n = batch.length;
+    while (n > 0 && used + blockSeconds(cardLearnBlock(d, batch.slice(0, n), random), opts) > budget) n--;
+    if (n === 0) break;
+    if (load) {
+      let fits = 0;
+      for (const j of batch.slice(0, n)) {
+        const sec = ps[j].end - ps[j].start;
+        const full = overfilledBy(load, sec, now, opts, true);
+        if (full) {
+          heldBack = full;
+          break;
+        }
+        bookNewPassage(load, sec, now, opts, true);
+        fits++;
+      }
+      n = fits;
+      if (n === 0) break;
+    }
+    const block = cardLearnBlock(d, batch.slice(0, n), random);
+    blocks.push(block);
+    used += blockSeconds(block, opts);
+    i += n;
+    if (n < batch.length) break;
+  }
+  return { used, next: i, ...(heldBack ? { heldBack } : {}) };
 }
 
 /** Rough time to learn passages from scratch, before any English exists (it's guessed from the audio length). */

@@ -8,6 +8,7 @@ import { reviewPasses } from "./srs";
 import {
   ANNOUNCE,
   announceSteps,
+  canCue,
   cueGroups,
   cueSize,
   hasEnglish,
@@ -36,6 +37,12 @@ interface BlockBase {
   phrases: SessionPhrase[];
   /** The phrase before the passage, played for context first. Absent when the session has just played it. */
   leadIn?: SessionPhrase;
+  /**
+   * Deck cards: the block is a set of cards, one phrase each, and this gives each phrase's passage
+   * index (`passage` is the first). They're tested in `order`, a shuffle of the phrase indices.
+   */
+  cards?: number[];
+  order?: number[];
 }
 
 export interface ReviewBlock extends BlockBase {
@@ -68,8 +75,11 @@ export interface Unit {
 }
 
 export type SessionEvent =
-  /** `misses` counts the graded cues missed (a cue may cover several phrases). */
-  | { kind: "reviewed"; block: ReviewBlock; misses: number; passed: boolean }
+  /**
+   * `misses` counts the graded cues missed (a cue may cover several phrases); `missed` lists the
+   * phrases in them, which for a set of cards says which cards failed.
+   */
+  | { kind: "reviewed"; block: ReviewBlock; misses: number; passed: boolean; missed: number[] }
   | { kind: "learning"; block: LearnBlock; phrases: number }
   | { kind: "learned"; block: LearnBlock };
 
@@ -107,6 +117,11 @@ const announceUnit = (text: string): Unit => ({ kind: "announce", steps: announc
 
 /** What's announced as a block starts: the kind of work and, when it has one, the passage's title. */
 export function blockAnnouncement(block: Block): string {
+  if (block.cards) {
+    const n = block.cards.length;
+    if (block.kind === "review") return `Review: ${n} ${n === 1 ? "card" : "cards"}.`;
+    return block.passageTitle ? `New cards: ${block.passageTitle}.` : "New cards.";
+  }
   const [what, untitled] =
     block.kind === "review"
       ? ["Review", "Review."]
@@ -125,7 +140,9 @@ function leadInUnit(block: Block): Unit | undefined {
 export function learnGroupUnits(block: LearnBlock, k: number, opts: DrillOptions): Unit[] {
   const p = block.phrases[k];
   const units: Unit[] = [{ kind: "learn", steps: learnSteps(block.episodeId, p, opts) }];
-  if (p.english) units.push(testUnit(block, [k], false, opts));
+  if (canCue(p)) units.push(testUnit(block, [k], false, opts));
+  // Cards stand alone: nothing to join, and a set is learned only as a whole.
+  if (block.cards) return units;
   if (k > 0 && hasEnglish([block.phrases[k - 1], p])) units.push(testUnit(block, [k - 1, k], false, opts));
   units[units.length - 1].learned = k + 1;
   return units;
@@ -137,9 +154,16 @@ const shadowUnits = (block: Block): Unit[] => [
   { kind: "shadow", steps: shadowSteps(block.episodeId, block.phrases) },
 ];
 
-/** Finishing a passage: every phrase from its English, in order, then the whole passage to shadow. */
+/** The phrase indices of a block in test order: shuffled for a set of cards, else as they come. */
+const testOrder = (block: Block) => block.order ?? block.phrases.map((_, i) => i);
+
+/**
+ * Finishing a passage: every phrase from its English, in order, then the whole passage to shadow.
+ * Finishing a set of cards: each card from its English again, shuffled.
+ */
 export function wrapUpUnits(block: LearnBlock, opts: DrillOptions): Unit[] {
-  const tests = block.phrases.flatMap((p, i) => (p.english ? [testUnit(block, [i], false, opts)] : []));
+  const tests = testOrder(block).flatMap((i) => (canCue(block.phrases[i]) ? [testUnit(block, [i], false, opts)] : []));
+  if (block.cards) return tests.length > 1 ? [announceUnit(ANNOUNCE.cardsAgain), ...tests] : [];
   return [...(tests.length ? [announceUnit(ANNOUNCE.wrapUp), ...tests] : []), ...shadowUnits(block)];
 }
 
@@ -151,11 +175,18 @@ function openingUnits(block: Block): Unit[] {
 
 export function blockUnits(block: Block, opts: DrillOptions): Unit[] {
   const units = openingUnits(block);
+  if (block.kind === "review" && block.cards) {
+    for (const i of testOrder(block)) {
+      const p = block.phrases[i];
+      units.push(canCue(p) ? testUnit(block, [i], true, opts) : { kind: "listen", steps: repeatSteps(block.episodeId, [p], opts, 1) });
+    }
+    return units;
+  }
   if (block.kind === "review") {
     for (const g of cueGroups(block.phrases, cueSize(block.level))) {
       const p = block.phrases[g[0]];
       // A phrase without English can't be tested, so it's just heard and repeated.
-      units.push(p.english ? testUnit(block, g, true, opts) : { kind: "listen", steps: repeatSteps(block.episodeId, [p], opts, 1) });
+      units.push(canCue(p) ? testUnit(block, g, true, opts) : { kind: "listen", steps: repeatSteps(block.episodeId, [p], opts, 1) });
     }
     units.push(...shadowUnits(block));
     return units;
@@ -224,8 +255,9 @@ export class DrillSession {
   private units: Unit[] = [];
   private unitIndex = 0;
   private stepIndex = 0;
-  /** Graded tests missed in the current block. */
+  /** Graded tests missed in the current block, and the phrases they tested. */
   private misses = 0;
+  private missedPhrases = new Set<number>();
 
   constructor(blocks: Block[], opts: DrillOptions, onEvent: (e: SessionEvent) => void) {
     this.blocks = blocks;
@@ -318,7 +350,10 @@ export class DrillSession {
   }
 
   private mark(unit: Unit) {
-    if (!unit.missed && unit.test!.graded) this.misses++;
+    if (!unit.missed && unit.test!.graded) {
+      this.misses++;
+      for (const i of unit.test!.phrases) this.missedPhrases.add(i);
+    }
     unit.missed = true;
   }
 
@@ -328,6 +363,7 @@ export class DrillSession {
     this.unitIndex = 0;
     this.stepIndex = 0;
     this.misses = 0;
+    this.missedPhrases = new Set();
     if (i < this.blocks.length && this.units.length === 0) this.enterBlock(i + 1);
   }
 
@@ -343,7 +379,13 @@ export class DrillSession {
 
     if (block.kind === "review") {
       const tests = this.units.filter((u) => u.test?.graded).length;
-      this.onEvent({ kind: "reviewed", block, misses: this.misses, passed: reviewPasses(this.misses, tests) });
+      this.onEvent({
+        kind: "reviewed",
+        block,
+        misses: this.misses,
+        passed: reviewPasses(this.misses, tests),
+        missed: [...this.missedPhrases].sort((a, b) => a - b),
+      });
     } else if (block.wrapUp) {
       this.onEvent({ kind: "learned", block });
     }

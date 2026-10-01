@@ -252,7 +252,9 @@ export async function deleteEpisode(uid: string, episode: Episode): Promise<void
   await removeEpisodeOfflineData(uid, episode).catch(() => undefined);
   const folder = ref(storage, `users/${uid}/episodes/${episodeId}`);
   const listing = await listAll(folder).catch(() => ({ items: [] as ReturnType<typeof ref>[] }));
-  await Promise.all(listing.items.map((item) => deleteObject(item).catch(() => undefined)));
+  // A deck whose build didn't finish still has its clips in a subfolder.
+  const clips = await listAll(ref(storage, `users/${uid}/episodes/${episodeId}/clips`)).catch(() => ({ items: [] as ReturnType<typeof ref>[] }));
+  await Promise.all([...listing.items, ...clips.items].map((item) => deleteObject(item).catch(() => undefined)));
   await deleteDoc(segmentsDoc(uid, episodeId)).catch(() => undefined);
   await deleteDoc(doc(db, "users", uid, "episodes", episodeId, "data", "excerpts")).catch(() => undefined);
   // Drill excerpts of the episode go with it.

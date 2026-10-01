@@ -39,7 +39,8 @@ const toDrill = (d: QueryDocumentSnapshot<DocumentData>): Drill => ({ id: d.id, 
 function cleanPassage(p: DrillPassage): DrillPassage {
   const out: DrillPassage = { start: p.start, end: p.end };
   if (p.title) out.title = p.title;
-  for (const k of ["level", "due", "last", "reviews", "lapses"] as const) if (p[k] !== undefined) out[k] = p[k];
+  for (const k of ["level", "due", "last", "reviews", "lapses", "lesson"] as const) if (p[k] !== undefined) out[k] = p[k];
+  if (p.card) out.card = true;
   return out;
 }
 
@@ -62,6 +63,11 @@ export async function createDrill(uid: string, drill: Omit<Drill, "id" | "create
     createdAt: Date.now(),
   });
   return ref.id;
+}
+
+/** For a deck: which lessons new cards may come from (null: all of them). */
+export async function setLessonLimit(uid: string, id: string, lessonLimit: number | null): Promise<void> {
+  await updateDoc(drillDoc(uid, id), { lessonLimit });
 }
 
 export async function deleteDrill(uid: string, id: string): Promise<void> {

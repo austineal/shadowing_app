@@ -11,10 +11,10 @@ import type { Drill, DrillPrefs, DrillSchedule } from "../../types";
 import { sessionDays } from "./forecast";
 import { DEFAULT_SCHEDULE } from "./labels";
 import { phrasesIn } from "./passages";
-import { frontier, planSession, type PlanDrill, type SessionPlan } from "./plan";
+import { CARD_BATCH, frontier, planSession, type PlanDrill, type SessionPlan } from "./plan";
 import { sessionEnglish, type Block } from "./session";
 import { DAY_MS, isDue } from "./srs";
-import { drillOptions, type DrillOptions, type SessionPhrase } from "./steps";
+import { canCue, drillOptions, type DrillOptions, type SessionPhrase } from "./steps";
 import { getDrillPrefs, getDrills, getRecentSessions, loadTranslations } from "./store";
 
 export interface Prepared {
@@ -77,17 +77,25 @@ export async function prepareSession(uid: string, language: string, now: number,
   ).filter((x) => x !== undefined);
 
   // English for the passages this session could use: every due one and the next few to learn.
+  // A deck brings its own, so it only needs Claude's for cards that came without.
   const texts: string[] = [];
   for (const { drill, segments } of loaded) {
     const f = frontier(drill);
+    const ahead = drill.kind === "cards" ? CARD_BATCH * 6 : 3;
     drill.passages.forEach((p, i) => {
-      if (isDue(p, now) || (f >= 0 && i >= f && i < f + 3)) texts.push(...phrasesIn(segments, p.start, p.end).map((s) => s.text));
+      if (isDue(p, now) || (f >= 0 && i >= f && i < f + ahead)) texts.push(...phrasesIn(segments, p.start, p.end).map((s) => s.text));
     });
   }
   const english = await loadTranslations(uid, language, texts);
   const planDrills: PlanDrill[] = loaded.map(({ drill, segments }) => ({
     drill,
-    phrases: segments.map((s) => ({ start: s.start, end: s.end, text: s.text, english: english.get(normalizePhrase(s.text)) })),
+    phrases: segments.map((s) => ({
+      start: s.start,
+      end: s.end,
+      text: s.text,
+      english: s.english ?? english.get(normalizePhrase(s.text)),
+      ...(s.enStart !== undefined && s.enEnd !== undefined ? { englishAt: { start: s.enStart, end: s.enEnd } } : {}),
+    })),
   }));
   // The language's sessions after this one, which a new passage's reviews have to fit in.
   const counted = recent.filter((l) => l.language === language && l.progress > 0);
@@ -107,7 +115,7 @@ export async function prepareSession(uid: string, language: string, now: number,
       if (plan.blocks.some((b) => b.episodeId === episode.id)) sources[episode.id] = await ensureAudioUrl(uid, episode);
     }
   }
-  const untranslated = plan.blocks.reduce((n, b) => n + blockPhrases(b).filter((p) => !p.english).length, 0);
+  const untranslated = plan.blocks.reduce((n, b) => n + blockPhrases(b).filter((p) => !canCue(p)).length, 0);
   const upcoming = loaded.flatMap(({ drill }) => drill.passages.flatMap((p) => (p.level !== undefined && p.due ? [p.due] : [])));
   return {
     schedule,

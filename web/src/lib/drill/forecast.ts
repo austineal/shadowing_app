@@ -9,7 +9,7 @@
  */
 import type { DrillPassage, DrillSchedule } from "../../types";
 import { availability, type SessionTimes } from "./cadence";
-import { blockSeconds, type ReviewBlock } from "./session";
+import { blockSeconds, blockUnits, unitsSeconds, type ReviewBlock } from "./session";
 import { MAX_LEVEL, dayNumber, dayStart, learnedPassage, reviewedPassage, type DayChooser } from "./srs";
 import type { DrillOptions, SessionPhrase } from "./steps";
 
@@ -79,14 +79,19 @@ const estimates = new WeakMap<DrillOptions, Map<string, number>>();
  * Rough length of a passage's review at a level, from its audio length alone: as if it were
  * phrases of about six seconds, two to a sentence, with English about as long as the original.
  */
-export function reviewSeconds(durationSec: number, level: number, opts: DrillOptions): number {
+export function reviewSeconds(durationSec: number, level: number, opts: DrillOptions, card = false): number {
   let memo = estimates.get(opts);
   if (!memo) estimates.set(opts, (memo = new Map()));
-  const sec = Math.max(2, Math.round(durationSec));
+  const sec = Math.max(card ? 1 : 2, Math.round(durationSec));
   const lvl = Math.max(0, Math.min(level, MAX_LEVEL));
-  const key = `${sec}:${lvl}`;
+  const key = `${sec}:${lvl}:${card ? "c" : "p"}`;
   const known = memo.get(key);
   if (known !== undefined) return known;
+  if (card) {
+    const est = cardReviewSeconds(sec, lvl, opts);
+    memo.set(key, est);
+    return est;
+  }
 
   const n = Math.max(1, Math.round(sec / 6.5));
   const len = (sec - (n - 1) * 0.5) / n;
@@ -110,6 +115,29 @@ export function reviewSeconds(durationSec: number, level: number, opts: DrillOpt
   const est = blockSeconds(block, opts);
   memo.set(key, est);
   return est;
+}
+
+/** Cards reviewed in one round, which share an announcement. */
+export const CARD_ROUND = 10;
+
+/** A card's share of a review round: its test (English about as long as the original) and a tenth of the round's announcement. */
+function cardReviewSeconds(sec: number, level: number, opts: DrillOptions): number {
+  const block: ReviewBlock = {
+    kind: "review",
+    drillId: "",
+    episodeId: "",
+    title: "",
+    passage: 0,
+    passageCount: 1,
+    level,
+    phrases: [{ start: 0, end: sec, text: "x.", english: "x".repeat(Math.round(sec * 12)) }],
+    cards: [0],
+    order: [0],
+  };
+  const units = blockUnits(block, opts);
+  const opening = units.filter((u) => u.kind === "announce");
+  const rest = units.filter((u) => u.kind !== "announce");
+  return unitsSeconds(block, rest, opts) + unitsSeconds(block, opening, opts) / CARD_ROUND;
 }
 
 /**
@@ -138,7 +166,7 @@ export function forecastLoad(passages: DrillPassage[], days: SessionDay[], now: 
   const load: LoadDay[] = days.map((d) => ({ ...d, reviewSec: 0, reviews: 0 }));
   for (const p of passages) {
     followReviews(p, days, now, (k, level) => {
-      load[k].reviewSec += reviewSeconds(p.end - p.start, level, opts);
+      load[k].reviewSec += reviewSeconds(p.end - p.start, level, opts, p.card);
       load[k].reviews++;
     });
   }
@@ -155,20 +183,20 @@ export function forecastLoad(passages: DrillPassage[], days: SessionDay[], now: 
  * first day where its reviews (at the next session, a day later, then three days after that) would
  * take the booked reviews past the time the day's sessions have.
  */
-export function overfilledBy(load: LoadDay[], durationSec: number, now: number, opts: DrillOptions): LoadDay | undefined {
+export function overfilledBy(load: LoadDay[], durationSec: number, now: number, opts: DrillOptions, card = false): LoadDay | undefined {
   let full: LoadDay | undefined;
   const last = dayNumber(now) + HOLD_BACK_DAYS;
   followReviews(learnedPassage({ start: 0, end: durationSec }, now), load, now, (k, level) => {
     const d = load[k];
-    if (!full && d.day <= last && d.reviewSec + reviewSeconds(durationSec, level, opts) > d.capacitySec) full = d;
+    if (!full && d.day <= last && d.reviewSec + reviewSeconds(durationSec, level, opts, card) > d.capacitySec) full = d;
   });
   return full;
 }
 
 /** Adds the reviews of a passage learned now to the load. */
-export function bookNewPassage(load: LoadDay[], durationSec: number, now: number, opts: DrillOptions): void {
+export function bookNewPassage(load: LoadDay[], durationSec: number, now: number, opts: DrillOptions, card = false): void {
   followReviews(learnedPassage({ start: 0, end: durationSec }, now), load, now, (k, level) => {
-    load[k].reviewSec += reviewSeconds(durationSec, level, opts);
+    load[k].reviewSec += reviewSeconds(durationSec, level, opts, card);
     load[k].reviews++;
   });
 }
@@ -180,7 +208,7 @@ export function bookedByDay(passages: DrillPassage[], schedule: DrillSchedule, n
   for (const p of passages) {
     if (p.level === undefined || p.due === undefined) continue;
     const day = sessionDayFrom(schedule, Math.max(today, dayNumber(p.due)));
-    booked.set(day, (booked.get(day) ?? 0) + reviewSeconds(p.end - p.start, p.level, opts));
+    booked.set(day, (booked.get(day) ?? 0) + reviewSeconds(p.end - p.start, p.level, opts, p.card));
   }
   return booked;
 }
@@ -196,11 +224,12 @@ export function spreadReviews(
   schedule: DrillSchedule,
   durationSec: number,
   opts: DrillOptions,
+  card = false,
 ): DayChooser {
   const comfortable = sessionsPerDay(schedule) * schedule.minutes * 60 * REVIEW_SHARE;
   const loadOn = (d: number) => booked.get(sessionDayFrom(schedule, d)) ?? 0;
   return (days, base, level) => {
-    if (loadOn(base) + reviewSeconds(durationSec, level, opts) <= comfortable) return base;
+    if (loadOn(base) + reviewSeconds(durationSec, level, opts, card) <= comfortable) return base;
     return [...days].sort((a, b) => loadOn(a) - loadOn(b) || Math.abs(a - base) - Math.abs(b - base) || a - b)[0];
   };
 }

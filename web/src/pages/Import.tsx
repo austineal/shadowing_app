@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { FolderSelect } from "../components/FolderSelect";
 import { ShowMore } from "../components/ShowMore";
@@ -7,13 +7,14 @@ import { LanguageSelect } from "../components/LanguageSelect";
 import { useFolders, useSubscriptions } from "../hooks/useLibrary";
 import { fetchFeed, importFeedEpisode, uploadEpisode, type FeedResult } from "../lib/episodes";
 import { subscribe } from "../lib/library";
+import { ROLE_LABEL, guessColumns, hasHeader, parseCsv, readCards, uploadDeck, type Columns, type Role } from "../lib/deck";
 import { formatDuration, titleFromFilename } from "../lib/format";
 import { loadRecentFeeds, rememberFeed } from "../lib/settings";
 
 const LANG_KEY = "shadowing.lastLanguage";
 
 export default function Import({ uid }: { uid: string }) {
-  const [tab, setTab] = useState<"upload" | "feed">("upload");
+  const [tab, setTab] = useState<"upload" | "feed" | "deck">("upload");
   const [language, setLanguage] = useState(() => localStorage.getItem(LANG_KEY) ?? "fr");
   useEffect(() => localStorage.setItem(LANG_KEY, language), [language]);
   const { folders } = useFolders(uid);
@@ -33,6 +34,9 @@ export default function Import({ uid }: { uid: string }) {
         </button>
         <button className={tab === "feed" ? "active" : ""} onClick={() => setTab("feed")}>
           Podcast feed
+        </button>
+        <button className={tab === "deck" ? "active" : ""} onClick={() => setTab("deck")}>
+          Card deck
         </button>
       </div>
       <div className="section">
@@ -59,6 +63,8 @@ export default function Import({ uid }: { uid: string }) {
         )}
         {tab === "upload" ? (
           <UploadForm uid={uid} language={language} folderId={folderId || null} />
+        ) : tab === "deck" ? (
+          <DeckForm uid={uid} language={language} folderId={folderId || null} />
         ) : (
           <FeedForm uid={uid} language={language} folderId={folderId || null} />
         )}
@@ -151,6 +157,159 @@ function UploadForm({ uid, language, folderId }: { uid: string; language: string
       {error && <p className="error small" style={{ marginBottom: 10 }}>{error}</p>}
       <button className="btn primary" disabled={!file || progress !== null} onClick={() => void submit()}>
         Upload and transcribe
+      </button>
+    </div>
+  );
+}
+
+const ROLES: Role[] = ["audio", "text", "englishAudio", "english", "lesson"];
+
+/** A deck of audio flashcards: a CSV with a row per card, and the audio files it names. */
+function DeckForm({ uid, language, folderId }: { uid: string; language: string; folderId: string | null }) {
+  const nav = useNavigate();
+  const [csv, setCsv] = useState<{ name: string; rows: string[][] } | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [title, setTitle] = useState("");
+  /** Columns chosen by hand; cleared when the CSV or files change, so the guess applies again. */
+  const [chosen, setChosen] = useState<Columns | null>(null);
+  const [progress, setProgress] = useState<number | null>(null);
+  const [error, setError] = useState<string>();
+
+  const names = useMemo(() => new Set(files.map((f) => f.name.toLowerCase())), [files]);
+  const header = csv && hasHeader(csv.rows, names) ? csv.rows[0] : null;
+  const body = csv ? csv.rows.slice(header ? 1 : 0) : [];
+  const guessed = useMemo(() => {
+    if (!csv) return null;
+    const h = hasHeader(csv.rows, names) ? csv.rows[0] : null;
+    return guessColumns(h, csv.rows.slice(h ? 1 : 0), names);
+  }, [csv, names]);
+  const cols = chosen ?? guessed;
+  const read = cols ? readCards(body, cols, files, header ? 1 : 0) : null;
+  const width = Math.max(header?.length ?? 0, ...body.slice(0, 50).map((r) => r.length));
+  const columnName = (i: number) => header?.[i] || `Column ${i + 1}: ${body[0]?.[i] ?? ""}`.slice(0, 40);
+  const lessons = read ? new Set(read.cards.flatMap((c) => (c.lesson ? [c.lesson] : []))).size : 0;
+  const withEnglish = read ? read.cards.filter((c) => c.englishAudio || c.english).length : 0;
+
+  const submit = async () => {
+    if (!read || read.cards.length === 0) return;
+    setError(undefined);
+    setProgress(0);
+    try {
+      const id = await uploadDeck(uid, { title, language, folderId, cards: read.cards, onProgress: setProgress });
+      nav(`/episode/${id}`, { replace: true });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setProgress(null);
+    }
+  };
+
+  if (language === "auto") return <p className="small muted">Choose the deck's language first.</p>;
+  return (
+    <div>
+      <p className="small muted" style={{ marginTop: 0 }}>
+        A CSV with a row per card (its audio file, the sentence, and optionally English audio, English text and a lesson), and
+        the audio files it names. The cards are joined into one recording and drilled card by card, in shuffled order.
+      </p>
+      <div className="field">
+        <label>Card list (CSV or TSV)</label>
+        <input
+          className="input"
+          type="file"
+          accept=".csv,.tsv,.txt,text/csv,text/plain"
+          onChange={async (e) => {
+            const f = e.target.files?.[0];
+            setChosen(null);
+            if (!f) return setCsv(null);
+            setCsv({ name: f.name, rows: parseCsv(await f.text()) });
+            if (!title) setTitle(titleFromFilename(f.name));
+          }}
+        />
+      </div>
+      <div className="field">
+        <label>Audio files</label>
+        <input
+          className="input"
+          type="file"
+          multiple
+          accept="audio/*,.mp3,.m4a,.ogg,.opus,.wav,.flac"
+          onChange={(e) => {
+            setChosen(null);
+            setFiles([...(e.target.files ?? [])]);
+          }}
+        />
+      </div>
+      <div className="field">
+        <label>Title</label>
+        <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Deck title" />
+      </div>
+      {csv && cols && (
+        <div className="field">
+          <label>Columns</label>
+          {ROLES.map((role) => (
+            <div key={role} className="row" style={{ marginBottom: 6 }}>
+              <span className="small" style={{ width: 110 }}>
+                {ROLE_LABEL[role]}
+              </span>
+              <select
+                className="input"
+                value={cols[role] ?? ""}
+                onChange={(e) => setChosen({ ...cols, [role]: e.target.value === "" ? null : Number(e.target.value) })}
+              >
+                <option value="">{role === "audio" || role === "text" ? "Choose…" : "None"}</option>
+                {Array.from({ length: width }, (_, i) => (
+                  <option key={i} value={i}>
+                    {columnName(i)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ))}
+        </div>
+      )}
+      {read && (
+        <div className="field small">
+          <p style={{ margin: "0 0 6px" }}>
+            <b>{read.cards.length}</b> {read.cards.length === 1 ? "card" : "cards"}
+            {lessons > 0 && ` in ${lessons} ${lessons === 1 ? "lesson" : "lessons"}`}
+            {read.cards.length > 0 && withEnglish < read.cards.length && (
+              <span className="muted"> · {read.cards.length - withEnglish} without English (Claude can translate them)</span>
+            )}
+          </p>
+          {read.cards.slice(0, 3).map((c, i) => (
+            <div key={i} className="muted" style={{ marginBottom: 4 }}>
+              {c.lesson && <span>[{c.lesson}] </span>}
+              {c.text}
+              {c.english && <span> — {c.english}</span>}
+              <span>
+                {" "}
+                ({c.audio.name}
+                {c.englishAudio ? `, ${c.englishAudio.name}` : ""})
+              </span>
+            </div>
+          ))}
+          {read.skipped.length > 0 && (
+            <p className="error" style={{ margin: "6px 0 0" }}>
+              {read.skipped.length} {read.skipped.length === 1 ? "row" : "rows"} left out:{" "}
+              {read.skipped
+                .slice(0, 3)
+                .map((s) => `row ${s.row}, ${s.why}`)
+                .join("; ")}
+              {read.skipped.length > 3 ? "; …" : ""}
+            </p>
+          )}
+        </div>
+      )}
+      {progress !== null && (
+        <div className="field">
+          <div className="progress">
+            <div style={{ width: `${Math.round(progress * 100)}%` }} />
+          </div>
+          <span className="small muted">Uploading… {Math.round(progress * 100)}%</span>
+        </div>
+      )}
+      {error && <p className="error small" style={{ marginBottom: 10 }}>{error}</p>}
+      <button className="btn primary" disabled={!read?.cards.length || progress !== null} onClick={() => void submit()}>
+        Upload deck
       </button>
     </div>
   );

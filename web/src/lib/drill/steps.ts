@@ -10,6 +10,8 @@ export interface SessionPhrase {
   end: number;
   text: string;
   english?: string;
+  /** Where the phrase's English is recorded in the same audio (deck cards); cued with that rather than the voice. */
+  englishAt?: { start: number; end: number };
 }
 
 export type Play =
@@ -90,8 +92,18 @@ function source(episodeId: string, ps: SessionPhrase[], rate = 1): Play {
 
 const textOf = (ps: SessionPhrase[]) => ps.map((p) => p.text).join(" ");
 
+/** Whether a phrase has English to cue it with, written or recorded. */
+export const canCue = (p: SessionPhrase) => !!p.english || !!p.englishAt;
+
 /** Whether every phrase has English to cue it with. */
-export const hasEnglish = (ps: SessionPhrase[]) => ps.every((p) => !!p.english);
+export const hasEnglish = (ps: SessionPhrase[]) => ps.every(canCue);
+
+/** A phrase's English: its recording when it has one, else read by the voice. */
+function englishPlay(episodeId: string, p: SessionPhrase): Play {
+  return p.englishAt
+    ? { kind: "source", episodeId, start: p.englishAt.start, end: p.englishAt.end, rate: 1 }
+    : { kind: "english", text: p.english ?? "" };
+}
 
 /** Listen and repeat, `plays` times; the first `slowPlays` are slowed. */
 export function repeatSteps(episodeId: string, ps: SessionPhrase[], opts: DrillOptions, plays = opts.repeats): Step[] {
@@ -108,8 +120,8 @@ export function repeatSteps(episodeId: string, ps: SessionPhrase[], opts: DrillO
 /** Learning a new phrase: what it means, then listen and repeat. */
 export function learnSteps(episodeId: string, p: SessionPhrase, opts: DrillOptions): Step[] {
   const steps: Step[] = [];
-  if (p.english) {
-    steps.push({ play: { kind: "english", text: p.english }, cue: "english", text: p.text, english: p.english });
+  if (canCue(p)) {
+    steps.push({ play: englishPlay(episodeId, p), cue: "english", text: p.text, english: p.english });
     steps.push({ play: { kind: "silence", sec: BEAT_SEC }, cue: "listen", text: p.text });
   }
   return [...steps, ...repeatSteps(episodeId, [p], opts)];
@@ -125,7 +137,7 @@ export function testSteps(episodeId: string, ps: SessionPhrase[], level: number,
   const steps: Step[] = [];
   ps.forEach((p, i) => {
     if (i > 0) steps.push({ play: { kind: "silence", sec: 0.3 }, cue: "english", english });
-    steps.push({ play: { kind: "english", text: p.english ?? "" }, cue: "english", english });
+    steps.push({ play: englishPlay(episodeId, p), cue: "english", english });
   });
   const text = textOf(ps);
   steps.push({ play: { kind: "silence", sec: speakSeconds(duration(ps), level, opts.answerExtraSec) }, cue: "speak", english });
@@ -168,7 +180,7 @@ export function cueGroups(ps: SessionPhrase[], size: CueSize): number[][] {
     cur = [];
   };
   ps.forEach((p, i) => {
-    if (!p.english) {
+    if (!canCue(p)) {
       flush();
       sentences.push([i]);
       return;
@@ -187,8 +199,8 @@ export function cueGroups(ps: SessionPhrase[], size: CueSize): number[][] {
     const prev = runs[runs.length - 1];
     const joins =
       !!prev &&
-      !!ps[prev[0]].english &&
-      !!ps[g[0]].english &&
+      canCue(ps[prev[0]]) &&
+      canCue(ps[g[0]]) &&
       span(prev) < joinBelow &&
       span([...prev, ...g]) <= max &&
       ps[g[0]].start - ps[prev[prev.length - 1]].end < LONG_PAUSE_SEC;
@@ -205,6 +217,7 @@ export const ANNOUNCE_CHIME_SEC = 0.35;
 export const ANNOUNCE = {
   wrapUp: "Now the whole passage, from the English.",
   shadow: "Now shadow along.",
+  cardsAgain: "Now each card again, from the English.",
   end: "That's the end of the session.",
 };
 
