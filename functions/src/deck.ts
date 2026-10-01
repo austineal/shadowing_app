@@ -24,7 +24,6 @@ interface ManifestCard {
   text: string;
   english?: string;
   englishAudio?: string;
-  lesson?: string;
 }
 
 /** Between a card and its English, and between one card and the next. */
@@ -59,7 +58,7 @@ function parseManifest(json: unknown): ManifestCard[] {
     const audio = str("audio");
     const text = str("text");
     if (!audio || !text) throw new Error(`Card ${i + 1} has no audio or no text.`);
-    return { audio, text, english: str("english"), englishAudio: str("englishAudio"), lesson: str("lesson") };
+    return { audio, text, english: str("english"), englishAudio: str("englishAudio") };
   });
 }
 
@@ -67,26 +66,20 @@ function parseManifest(json: unknown): ManifestCard[] {
 const DEFAULT_SCHEDULE = { perDay: 1, everyDays: 1, minutes: 20, newMaterial: true, learning: "full" };
 
 /**
- * Adds the deck to the language's drills, unless it's there already (a rebuild): every card, to
- * be learned lesson by lesson in the order the lessons first appear, shuffled within each.
- * Matches createCardsDrill in the web app.
+ * Adds the deck to the language's drills, unless it's there already (a rebuild): every card, in
+ * a shuffled order to learn them in. Matches createCardsDrill in the web app.
  */
 async function addDrill(uid: string, episodeId: string, title: string, language: string, durationSec: number, segments: Record<string, unknown>[]) {
   const drills = db.collection(`users/${uid}/drills`);
   const existing = await drills.where("episodeId", "==", episodeId).get();
   if (existing.docs.some((d) => d.get("kind") === "cards")) return;
 
-  const lessonOf = (s: Record<string, unknown>) => (typeof s.lesson === "string" ? s.lesson : undefined);
-  const lessons = [...new Set(segments.flatMap((s) => lessonOf(s) ?? []))];
-  const groups = lessons.length ? lessons.map(() => [] as Record<string, unknown>[]) : [[] as Record<string, unknown>[]];
-  for (const s of segments) groups[Math.max(0, lessons.indexOf(lessonOf(s) ?? ""))].push(s);
-  const passages = groups.flatMap((g, lesson) => {
-    for (let i = g.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [g[i], g[j]] = [g[j], g[i]];
-    }
-    return g.map((s) => ({ start: s.start, end: s.end, card: true, ...(lessons.length ? { lesson } : {}) }));
-  });
+  const cards = [...segments];
+  for (let i = cards.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [cards[i], cards[j]] = [cards[j], cards[i]];
+  }
+  const passages = cards.map((s) => ({ start: s.start, end: s.end, card: true }));
 
   await drills.add({
     kind: "cards",
@@ -97,7 +90,6 @@ async function addDrill(uid: string, episodeId: string, title: string, language:
     start: 0,
     end: durationSec,
     passages,
-    lessons,
     learning: null,
     createdAt: Date.now(),
   });
@@ -150,7 +142,6 @@ async function build(uid: string, episodeId: string): Promise<void> {
         seg.enEnd = seconds(bytes);
       }
       if (c.english) seg.english = c.english;
-      if (c.lesson) seg.lesson = c.lesson;
       return seg;
     });
     push(silence(0.5));

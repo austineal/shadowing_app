@@ -186,11 +186,9 @@ export interface Drill {
   learning?: { passage: number; phrases: number } | null;
   /**
    * "cards": a deck drilled card by card, each card a passage of one phrase. The passages are in
-   * the order they're learned (lesson by lesson, shuffled within each), reviewed in shuffled rounds.
+   * the order they're learned (shuffled when the drill is made), reviewed in shuffled rounds.
    */
   kind?: "cards";
-  /** Cards: the deck's lessons in order; each passage's `lesson` indexes this. */
-  lessons?: string[];
   /** When the excerpt was chosen (ms since epoch). */
   createdAt: number;
 }
@@ -215,8 +213,6 @@ export interface DrillPassage {
   lapses?: number;
   /** A card of a deck rather than a stretch of an episode (see Drill.kind). */
   card?: boolean;
-  /** Cards: index into the drill's lessons. */
-  lesson?: number;
 }
 
 /** How often a language's drill sessions come up. Stored per language in users/{uid}/prefs/drill. */
@@ -294,11 +290,10 @@ export interface Segment {
   start: number;
   end: number;
   text: string;
-  /** Deck cards: the English from the deck, where its English audio lies, and the card's lesson. */
+  /** Deck cards: the English from the deck, and where its English audio lies. */
   english?: string;
   enStart?: number;
   enEnd?: number;
-  lesson?: string;
 }
 
 export interface SegmentsDoc {

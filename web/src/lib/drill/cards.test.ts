@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { reviewSeconds } from "./forecast";
-import { CARD_BATCH, frontier, planSession, type PlanDrill } from "./plan";
+import { CARD_BATCH, planSession, type PlanDrill } from "./plan";
 import { DrillSession, blockUnits, type Block, type SessionEvent } from "./session";
 import { drillOptions, testSteps, type SessionPhrase } from "./steps";
 import type { Drill, DrillPassage } from "../../types";
@@ -31,7 +31,6 @@ function deck(id: string, passages: Partial<DrillPassage>[], patch: Partial<Dril
       end: passages.length * 10,
       createdAt: 0,
       learning: null,
-      lessons: ["Level 1", "Level 2", "Level 3"],
       passages: passages.map((p, i) => ({ start: i * 10, end: i * 10 + 8, card: true, ...p })),
       ...patch,
     },
@@ -40,7 +39,7 @@ function deck(id: string, passages: Partial<DrillPassage>[], patch: Partial<Dril
 }
 
 const due: Partial<DrillPassage> = { level: 2, due: now - DAY, last: now - 4 * DAY };
-const fresh = (lesson = 0): Partial<DrillPassage> => ({ lesson });
+const fresh = (): Partial<DrillPassage> => ({});
 /** Not random: keeps the order, so tests can predict it. */
 const keep = () => 0.999;
 
@@ -63,14 +62,6 @@ describe("planSession: decks", () => {
     ]);
     expect(plan.blocks.every((b) => b.kind === "learn" && b.wrapUp && b.from === 0 && b.to === b.cards!.length)).toBe(true);
     expect(CARD_BATCH).toBe(5);
-  });
-
-  it("names a batch's lesson and carries on into the next lessons", () => {
-    const d = deck("a", [{ ...due, lesson: 0 }, fresh(0), fresh(1), fresh(1), fresh(2)]);
-    const plan = planSession({ now, budgetSec: 3600, newMaterial: true, opts, drills: [d], random: keep });
-    expect(plan.blocks.filter((b) => b.kind === "learn").flatMap((b) => b.cards)).toEqual([1, 2, 3, 4]);
-    expect(plan.blocks.find((b) => b.kind === "learn")?.passageTitle).toBe("Level 1");
-    expect(frontier(d.drill)).toBe(1);
   });
 
   it("shares the time for new material with an excerpt", () => {

@@ -83,12 +83,10 @@ function shuffled<T>(xs: T[], random: () => number): T[] {
 
 /** A deck's cards as one block: each card's phrase, in the order given, tested in a shuffled order. */
 function cardsBase(d: PlanDrill, cards: number[], random: () => number) {
-  const lesson = d.drill.passages[cards[0]].lesson;
   return {
     drillId: d.drill.id,
     episodeId: d.drill.episodeId,
     title: d.drill.title ?? d.drill.episodeTitle,
-    passageTitle: lesson === undefined ? undefined : d.drill.lessons?.[lesson],
     passage: cards[0],
     passageCount: d.drill.passages.length,
     phrases: cards.map((i) => passagePhrases(d, i)[0]),
