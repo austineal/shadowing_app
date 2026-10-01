@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import type { SessionDay } from "./forecast";
 import { learningDrill, learningSeconds, planSession, type PlanDrill } from "./plan";
+import { dayNumber } from "./srs";
 import { drillOptions, type SessionPhrase } from "./steps";
 import type { Drill, DrillPassage } from "../../types";
 
@@ -101,6 +103,39 @@ describe("planSession: learning", () => {
     expect(learningDrill([newer, older, started])?.drill.id).toBe("started");
     const done = drill("done", [{ level: 2, due: now + DAY }], { createdAt: 0 });
     expect(learningDrill([done])).toBeUndefined();
+  });
+});
+
+describe("planSession: holding back new material", () => {
+  const today = dayNumber(now);
+  /** The sessions after this one: one a day from tomorrow, 20 minutes each. */
+  const upcoming: SessionDay[] = Array.from({ length: 8 }, (_, k) => ({ day: today + 1 + k, sessions: 1, capacitySec: 20 * 60 }));
+  const dueTomorrow: Partial<DrillPassage> = { level: 2, due: now + DAY, last: now - 2 * DAY };
+  const plan = (d: PlanDrill) => planSession({ now, budgetSec: 30 * 60, newMaterial: true, opts, drills: [d], upcoming });
+
+  it("starts a new passage when its reviews fit in the coming week", () => {
+    const p = plan(drill("a", [dueTomorrow, dueTomorrow, {}, {}]));
+    expect(p.blocks[0]).toMatchObject({ kind: "learn", passage: 2, from: 0 });
+    expect(p.heldBack).toBeUndefined();
+  });
+
+  it("holds new passages back when one would overfill tomorrow's session", () => {
+    const p = plan(drill("a", [dueTomorrow, dueTomorrow, dueTomorrow, dueTomorrow, dueTomorrow, {}, {}]));
+    expect(p.blocks).toEqual([]);
+    expect(p.heldBack?.day).toBe(today + 1);
+  });
+
+  it("stops after the passages that fit, counting the ones it starts", () => {
+    const p = plan(drill("a", [dueTomorrow, dueTomorrow, dueTomorrow, dueTomorrow, {}, {}, {}], { learning: null }));
+    const started = p.blocks.filter((b) => b.kind === "learn" && b.from === 0);
+    expect(started.map((b) => b.passage)).toEqual([4]);
+    expect(p.heldBack?.day).toBe(today + 1);
+  });
+
+  it("still finishes a passage already under way", () => {
+    const busy = [dueTomorrow, dueTomorrow, dueTomorrow, dueTomorrow, dueTomorrow, dueTomorrow];
+    const p = plan(drill("a", [...busy, {}], { learning: { passage: 6, phrases: 2 } }));
+    expect(p.blocks[0]).toMatchObject({ kind: "learn", passage: 6, from: 2 });
   });
 });
 

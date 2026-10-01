@@ -19,7 +19,7 @@ const review = (patch: Partial<ReviewBlock> = {}): ReviewBlock => ({
   passage: 1,
   passageCount: 3,
   phrases: phrases(6),
-  level: 2,
+  level: 1, // phrase-by-phrase cues (see "growing cues" below)
   leadIn: phrase(-1),
   ...patch,
 });
@@ -123,6 +123,65 @@ describe("DrillSession: review", () => {
     expect(session.current()!.unit.kind).toBe("lead-in");
     expect(session.canMiss()).toBe(false);
     expect(session.missed()).toBeNull();
+  });
+});
+
+describe("DrillSession: growing cues", () => {
+  /** Phrases 4 seconds long, 0.5 seconds apart; a "." ends a sentence. */
+  const spoken = (...texts: string[]): SessionPhrase[] =>
+    texts.map((text, i) => ({ start: i * 4.5, end: i * 4.5 + 4, text, english: `e${i}` }));
+  const testsOf = (session: DrillSession) => {
+    const tests: string[] = [];
+    let last: Current["unit"] | undefined;
+    for (let guard = 0; !session.finished && guard < 5000; guard++) {
+      const cur = session.current()!;
+      if (cur.unit !== last && cur.unit.kind === "test") tests.push(cur.unit.test!.phrases.join("+"));
+      last = cur.unit;
+      session.advance();
+    }
+    return tests;
+  };
+
+  it("cues a young passage phrase by phrase, and whole sentences from level 2", () => {
+    const ps = spoken("a", "b.", "c", "d", "e.", "f.");
+    expect(testsOf(start([review({ phrases: ps, level: 1 })]).session)).toEqual(["0", "1", "2", "3", "4", "5"]);
+    expect(testsOf(start([review({ phrases: ps, level: 2 })]).session)).toEqual(["0+1", "2+3+4", "5"]);
+  });
+
+  it("cues runs of sentences from level 4", () => {
+    const ps = spoken("a", "b.", "c", "d", "e.", "f.");
+    // Sentences stay whole: the second run takes the rest, as it fits in 20 seconds.
+    expect(testsOf(start([review({ phrases: ps, level: 4 })]).session)).toEqual(["0+1", "2+3+4+5"]);
+  });
+
+  it("shows a sentence's answer a phrase at a time", () => {
+    const { session } = start([review({ phrases: spoken("a", "b."), level: 2, leadIn: undefined })]);
+    while (session.current()!.step.cue !== "answer") session.advance();
+    expect(session.current()!.step.phrases?.map((p) => p.text)).toEqual(["a", "b."]);
+  });
+
+  it("fixes a missed sentence a phrase at a time, then retries it whole", () => {
+    const { session } = start([review({ phrases: spoken("a", "b.", "c."), level: 2, leadIn: undefined })]);
+    const log = run(session, (cur) => cur.unit.kind === "test" && cur.unit.test?.phrases.join() === "0,1" && cur.step.cue === "speak");
+    expect(log.filter((s) => s.startsWith("fixup:"))).toEqual([
+      ...["fixup:listen", "fixup:repeat", "fixup:listen", "fixup:repeat"],
+      ...["fixup:english", "fixup:english", "fixup:english", "fixup:speak", "fixup:answer", "fixup:answer"],
+    ]);
+  });
+
+  it("counts misses by cue, and needs four cues to forgive one", () => {
+    const ps = spoken("a", "b.", "c", "d.", "e", "f.", "g", "h.");
+    const missSentence = (first: number) => (cur: Current) =>
+      cur.unit.kind === "test" && cur.unit.test?.phrases[0] === first && cur.unit.test.graded && cur.step.cue === "speak";
+    // Four sentences: one missed passes.
+    let s = start([review({ phrases: ps, level: 2 })]);
+    expect(testsOf(start([review({ phrases: ps, level: 2 })]).session)).toEqual(["0+1", "2+3", "4+5", "6+7"]);
+    run(s.session, missSentence(0));
+    expect(s.events).toEqual([expect.objectContaining({ misses: 1, passed: true })]);
+    // Two runs of sentences: one missed fails.
+    s = start([review({ phrases: ps, level: 4 })]);
+    run(s.session, missSentence(0));
+    expect(s.events).toEqual([expect.objectContaining({ misses: 1, passed: false })]);
   });
 });
 

@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useEpisode, useSegmentsDoc } from "../hooks/useEpisode";
-import { useDrills, useExcerptSuggestions } from "../hooks/useDrills";
+import { useDrills, useExcerptSuggestions, useNow } from "../hooks/useDrills";
 import { useSegmentPlayer } from "../hooks/useSegmentPlayer";
 import { useStudy, type Study } from "../hooks/useStudy";
 import { alignTranscript } from "../lib/align";
+import { transcriptMarks } from "../lib/drill/progress";
 import {
   ensureAudioUrl,
   loadText,
@@ -27,6 +28,7 @@ import { useOnline } from "../lib/offline";
 import { ExcerptPicker } from "../components/ExcerptPicker";
 import { ExcerptSuggestionsSheet } from "../components/ExcerptSuggestions";
 import { OfflineButton } from "../components/OfflineButton";
+import { PassageLabel } from "../components/PassageMap";
 import { StudySection } from "../components/StudySection";
 import { PhraseStudySheet } from "../components/PhraseStudySheet";
 import { visibleNotes } from "../lib/notes";
@@ -228,6 +230,9 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
   const player = useSegmentPlayer(src, { segments, settings, title: episode.title, getClip: study.getClip });
   const allDrills = useDrills(uid);
   const episodeDrills = useMemo(() => (allDrills ?? []).filter((d) => d.episodeId === episode.id), [allDrills, episode.id]);
+  // The drilled excerpts as a map over the transcript: each passage coloured by how well it's known.
+  const now = useNow();
+  const marks = useMemo(() => transcriptMarks(segments, episodeDrills, now), [segments, episodeDrills, now]);
   const suggestions = useExcerptSuggestions(uid, episode.id);
 
   // Download English clips for the next few phrases so they're decoded before they're due.
@@ -370,10 +375,6 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
     [settings.mode],
   );
 
-  const inDrill = (s: Segment) => {
-    const mid = (s.start + s.end) / 2;
-    return episodeDrills.some((d) => mid >= d.start && mid < d.end);
-  };
   const isPicked = (i: number) => {
     if (picking?.first === undefined) return false;
     const last = picking.last ?? picking.first;
@@ -443,39 +444,46 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
       </header>
 
       <div className="transcript" ref={listRef}>
-        {segments.map((s, i) => (
-          <div key={s.id} className="seg-row">
-            <button
-              data-i={i}
-              className={`seg ${i === player.index && !picking ? "current" : ""} ${i < player.index ? "done" : ""} ${
-                inDrill(s) ? "in-drill" : ""
-              } ${isPicked(i) ? "picked" : ""}`}
-              onClick={() => (picking ? pick(i) : editing ? player.select(i) : player.playSegment(i))}
-            >
-              <span className="t">{formatTime(s.start)}</span>
-              {s.text}
-              {(() => {
-                const p = study.phraseAt(i);
-                return p && visibleNotes(p).length > 0 ? <span className="note-dot" aria-label="Has notes" /> : null;
-              })()}
-            </button>
-            {editing && (
-              <div className="seg-tools">
-                <button className="btn small" disabled={!!busy} onClick={() => void onSplit(i)} title="Split at the longest pause">
-                  Split
-                </button>
+        {segments.map((s, i) => {
+          const mark = marks.get(i);
+          return (
+            <Fragment key={s.id}>
+              {mark?.first && <PassageLabel mark={mark} />}
+              <div className="seg-row">
                 <button
-                  className="btn small"
-                  disabled={!!busy || i + 1 >= segments.length}
-                  onClick={() => void onMerge(i)}
-                  title="Merge with next phrase"
+                  data-i={i}
+                  className={`seg ${i === player.index && !picking ? "current" : ""} ${i < player.index ? "done" : ""} ${
+                    mark ? `in-drill st-${mark.stage} ${mark.due ? "drill-due" : ""}` : ""
+                  } ${isPicked(i) ? "picked" : ""}`}
+                  onClick={() => (picking ? pick(i) : editing ? player.select(i) : player.playSegment(i))}
                 >
-                  Merge ↓
+                  <span className="t">{formatTime(s.start)}</span>
+                  {s.text}
+                  {(() => {
+                    const p = study.phraseAt(i);
+                    return p && visibleNotes(p).length > 0 ? <span className="note-dot" aria-label="Has notes" /> : null;
+                  })()}
                 </button>
+                {editing && (
+                  <div className="seg-tools">
+                    <button className="btn small" disabled={!!busy} onClick={() => void onSplit(i)} title="Split at the longest pause">
+                      Split
+                    </button>
+                    <button
+                      className="btn small"
+                      disabled={!!busy || i + 1 >= segments.length}
+                      onClick={() => void onMerge(i)}
+                      title="Merge with next phrase"
+                    >
+                      Merge ↓
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        ))}
+              {mark?.learnedTo && <div className="learned-line">learned up to here</div>}
+            </Fragment>
+          );
+        })}
       </div>
 
       <div className="dock">

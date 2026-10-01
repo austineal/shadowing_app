@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { PassageMap, PassageMapKey } from "../components/PassageMap";
+import { ReviewForecast } from "../components/ReviewForecast";
 import { useEpisodes } from "../hooks/useEpisode";
-import { useDrillPrefs, useDrills, useNow } from "../hooks/useDrills";
+import { useDrillPrefs, useDrills, useNow, useRecentSessions } from "../hooks/useDrills";
 import { pickAnchorDay } from "../lib/drill/cadence";
 import { DEFAULT_SCHEDULE, FREQUENCIES, SESSION_MINUTES, frequencyOf } from "../lib/drill/labels";
-import { frontier } from "../lib/drill/plan";
-import { dayNumber, isDue, isLearned } from "../lib/drill/srs";
+import { formatProgress, progressOf } from "../lib/drill/progress";
+import { dayNumber } from "../lib/drill/srs";
 import { drillVoice } from "../lib/drill/prepare";
 import { deleteDrill, setDrillVoice, setSchedule } from "../lib/drill/store";
 import { formatBytes, formatTime } from "../lib/format";
@@ -14,7 +16,7 @@ import { episodeLanguage } from "../lib/organise";
 import { setStudyLevel, subscribeStudyLevels } from "../lib/study";
 import { ENGLISH_VOICES, isVoiceStored, loadVoice } from "../lib/tts/client";
 import { clearClips, storedClipBytes } from "../lib/tts/clipCache";
-import { CEFR_LEVELS, type CefrLevel, type Drill, type DrillSchedule } from "../types";
+import { CEFR_LEVELS, type CefrLevel, type Drill, type DrillSchedule, type DrillSessionLog } from "../types";
 
 /** The schedule with an anchor day that takes turns with other languages on the same rhythm. */
 function withTurn(schedule: DrillSchedule, others: DrillSchedule[]): DrillSchedule {
@@ -28,6 +30,7 @@ export default function DrillSettings({ uid }: { uid: string }) {
   const { episodes } = useEpisodes(uid);
   const prefs = useDrillPrefs(uid);
   const drills = useDrills(uid);
+  const sessions = useRecentSessions(uid);
   const [levels, setLevels] = useState<Record<string, CefrLevel>>({});
   useEffect(() => subscribeStudyLevels(uid, setLevels), [uid]);
 
@@ -54,6 +57,11 @@ export default function DrillSettings({ uid }: { uid: string }) {
         Each language you drill gets its own rhythm. A session reviews what's due first, then learns new passages of your current
         excerpt with the time left. Choose excerpts from an episode's <b>Drill</b> button.
       </p>
+      {!!drills?.length && (
+        <div className="section" style={{ paddingBottom: 0 }}>
+          <PassageMapKey />
+        </div>
+      )}
       {prefs === undefined || drills === undefined ? (
         <div className="center">
           <div className="spinner" />
@@ -72,6 +80,7 @@ export default function DrillSettings({ uid }: { uid: string }) {
                 .map(([, s]) => s)}
               level={levels[lang]}
               drills={drills.filter((d) => d.language === lang)}
+              sessions={(sessions ?? []).filter((s) => s.language === lang && s.progress > 0)}
             />
           ))}
         </div>
@@ -90,8 +99,11 @@ function LanguageCard(props: {
   others: DrillSchedule[];
   level?: CefrLevel;
   drills: Drill[];
+  /** The language's recent sessions that count towards its schedule. */
+  sessions: DrillSessionLog[];
 }) {
   const { uid, language, schedule, others } = props;
+  const now = useNow();
   const [error, setError] = useState<string>();
   const save = (next: DrillSchedule | null) => void setSchedule(uid, language, next).catch((e) => setError(String(e)));
   const set = (patch: Partial<DrillSchedule>) => schedule && save({ ...schedule, ...patch });
@@ -188,6 +200,7 @@ function LanguageCard(props: {
             </label>
           </div>
         )}
+        {schedule && <ReviewForecast schedule={schedule} drills={props.drills} sessions={props.sessions} now={now} />}
         {props.drills.length > 0 && (
           <div className="excerpts">
             {[...props.drills]
@@ -205,18 +218,16 @@ function LanguageCard(props: {
 
 function ExcerptRow({ uid, drill }: { uid: string; drill: Drill }) {
   const now = useNow();
-  const learned = drill.passages.filter(isLearned).length;
-  const due = drill.passages.filter((p) => isDue(p, now)).length;
   return (
     <div className="excerpt-row">
       <div className="body">
         <Link to={`/episode/${drill.episodeId}`}>{drill.title ?? drill.episodeTitle}</Link>
         <div className="small muted">
           {drill.title ? `${drill.episodeTitle} · ` : ""}
-          {formatTime(drill.start)}–{formatTime(drill.end)} · {learned} of {drill.passages.length} passages learned
-          {due > 0 ? ` · ${due} due` : ""}
-          {frontier(drill) < 0 ? " · finished" : ""}
+          {formatTime(drill.start)}–{formatTime(drill.end)}
         </div>
+        <PassageMap drill={drill} now={now} />
+        <div className="small muted">{formatProgress(progressOf([drill], now))}</div>
       </div>
       <button
         className="btn ghost small danger"

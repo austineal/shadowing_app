@@ -8,13 +8,14 @@ import { loadDefaultSettings } from "../settings";
 import { normalizePhrase } from "../study";
 import { DEFAULT_ENGLISH_VOICE } from "../tts/client";
 import type { Drill, DrillPrefs, DrillSchedule } from "../../types";
+import { sessionDays } from "./forecast";
 import { DEFAULT_SCHEDULE } from "./labels";
 import { phrasesIn } from "./passages";
 import { frontier, planSession, type PlanDrill, type SessionPlan } from "./plan";
 import type { Block } from "./session";
-import { isDue } from "./srs";
+import { DAY_MS, isDue } from "./srs";
 import { drillOptions, type DrillOptions, type SessionPhrase } from "./steps";
-import { getDrillPrefs, getDrills, loadTranslations } from "./store";
+import { getDrillPrefs, getDrills, getRecentSessions, loadTranslations } from "./store";
 
 export interface Prepared {
   schedule: DrillSchedule;
@@ -38,17 +39,34 @@ export function drillVoice(prefs: DrillPrefs | undefined): string {
   return prefs?.voice ?? loadDefaultSettings().englishVoice ?? DEFAULT_ENGLISH_VOICE;
 }
 
+/** How a language's drills play: its learning style and answer time, with the player's pauses and padding. */
+export function scheduleOptions(schedule: DrillSchedule): DrillOptions {
+  return drillOptions(schedule.learning, loadDefaultSettings(), schedule.answerTime ?? 0);
+}
+
+export interface PrepareOptions {
+  /** Also resolve the episodes' audio URLs (default true). */
+  withAudio?: boolean;
+  /** Start new passages even if their reviews won't fit in the coming week (see planSession). */
+  learnAnyway?: boolean;
+}
+
 /** The phrases a block drills: a learning block may cover only part of its passage. */
 function blockPhrases(b: Block): SessionPhrase[] {
   if (b.kind === "review" || b.wrapUp) return b.phrases;
   return b.phrases.slice(Math.max(0, b.from - 1), b.to);
 }
 
-/** Plans the language's session as it would run at `now`. `withAudio` also resolves the episodes' audio URLs. */
-export async function prepareSession(uid: string, language: string, now: number, withAudio = true): Promise<Prepared> {
-  const [prefs, drills] = await Promise.all([getDrillPrefs(uid), getDrills(uid, language)]);
+/** Plans the language's session as it would run at `now`. */
+export async function prepareSession(uid: string, language: string, now: number, options: PrepareOptions = {}): Promise<Prepared> {
+  const { withAudio = true, learnAnyway = false } = options;
+  const [prefs, drills, recent] = await Promise.all([
+    getDrillPrefs(uid),
+    getDrills(uid, language),
+    getRecentSessions(uid, now - 8 * DAY_MS).catch(() => []),
+  ]);
   const schedule = prefs.schedules[language] ?? DEFAULT_SCHEDULE;
-  const opts = drillOptions(schedule.learning, loadDefaultSettings(), schedule.answerTime ?? 0);
+  const opts = scheduleOptions(schedule);
   const loaded = (
     await Promise.all(
       drills.map(async (drill) => {
@@ -71,7 +89,17 @@ export async function prepareSession(uid: string, language: string, now: number,
     drill,
     phrases: segments.map((s) => ({ start: s.start, end: s.end, text: s.text, english: english.get(normalizePhrase(s.text)) })),
   }));
-  const plan = planSession({ now, budgetSec: schedule.minutes * 60, newMaterial: schedule.newMaterial, opts, drills: planDrills });
+  // The language's sessions after this one, which a new passage's reviews have to fit in.
+  const counted = recent.filter((l) => l.language === language && l.progress > 0);
+  const later = learnAnyway ? undefined : sessionDays(schedule, [...counted, { startedAt: now, endedAt: now }], now, 9);
+  const plan = planSession({
+    now,
+    budgetSec: schedule.minutes * 60,
+    newMaterial: schedule.newMaterial,
+    opts,
+    drills: planDrills,
+    upcoming: later,
+  });
 
   const sources: Record<string, string> = {};
   if (withAudio) {

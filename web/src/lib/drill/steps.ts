@@ -2,6 +2,7 @@
  * The building blocks of a drill session: what plays, in what order, for learning a phrase,
  * testing it from its English cue, fixing it after a miss, and shadowing a whole passage.
  */
+import { SENTENCE_END } from "../segmenter";
 
 /** A phrase as a drill uses it: its audio, its text and (once study material exists) its English. */
 export interface SessionPhrase {
@@ -109,7 +110,8 @@ export function learnSteps(episodeId: string, p: SessionPhrase, opts: DrillOptio
 
 /**
  * The English of one or more consecutive phrases, time to say them, then the original as the
- * answer. The text stays hidden until the answer plays.
+ * answer. The text stays hidden until the answer plays; an answer of several phrases is shown a
+ * phrase at a time as it plays, then whole.
  */
 export function testSteps(episodeId: string, ps: SessionPhrase[], level: number, opts: DrillOptions): Step[] {
   const english = ps.map((p) => p.english ?? "").join(" ");
@@ -120,9 +122,73 @@ export function testSteps(episodeId: string, ps: SessionPhrase[], level: number,
   });
   const text = textOf(ps);
   steps.push({ play: { kind: "silence", sec: speakSeconds(duration(ps), level, opts.answerExtraSec) }, cue: "speak", english });
-  steps.push({ play: source(episodeId, ps), cue: "answer", text, english });
+  steps.push({ play: source(episodeId, ps), cue: "answer", text, english, ...(ps.length > 1 ? { phrases: ps } : {}) });
   steps.push({ play: { kind: "silence", sec: GRACE_SEC }, cue: "answer", text, english });
   return steps;
+}
+
+/** How much a review cues at once: a phrase, a sentence (short ones joined), or a run of sentences. */
+export type CueSize = "phrase" | "sentence" | "turn";
+
+/**
+ * Cues grow as a passage matures, so that in the end whole stretches come out from one English
+ * cue: phrases at first, sentences from level 2 (a three-day gap), runs of sentences from level 4
+ * (two weeks).
+ */
+export function cueSize(level: number): CueSize {
+  return level >= 4 ? "turn" : level >= 2 ? "sentence" : "phrase";
+}
+
+/** Longest audio one sentence cue covers; a longer sentence is cued in parts. */
+const SENTENCE_MAX_SEC = 15;
+/** At sentence size, short sentences are joined until a cue covers at least this much ("Yes." on its own is too easy). */
+const SENTENCE_MIN_SEC = 6;
+/** Longest audio a run of sentences covers. */
+const TURN_MAX_SEC = 20;
+/** A pause this long isn't joined over: it most likely marks a new speaker or thought. */
+const LONG_PAUSE_SEC = 1.2;
+
+/**
+ * The phrases a review cues together, as runs of consecutive indices into `ps`. A phrase without
+ * English can't be cued, so it stands alone and breaks the run.
+ */
+export function cueGroups(ps: SessionPhrase[], size: CueSize): number[][] {
+  const span = (g: number[]) => ps[g[g.length - 1]].end - ps[g[0]].start;
+  const sentences: number[][] = [];
+  let cur: number[] = [];
+  const flush = () => {
+    if (cur.length) sentences.push(cur);
+    cur = [];
+  };
+  ps.forEach((p, i) => {
+    if (!p.english) {
+      flush();
+      sentences.push([i]);
+      return;
+    }
+    if (cur.length && span([...cur, i]) > SENTENCE_MAX_SEC) flush();
+    cur.push(i);
+    if (size === "phrase" || SENTENCE_END.test(p.text.trim())) flush();
+  });
+  flush();
+  if (size === "phrase") return sentences;
+
+  // Join whole sentences: at sentence size while the cue is still short, at turn size up to the limit.
+  const [joinBelow, max] = size === "sentence" ? [SENTENCE_MIN_SEC, SENTENCE_MAX_SEC] : [Infinity, TURN_MAX_SEC];
+  const runs: number[][] = [];
+  for (const g of sentences) {
+    const prev = runs[runs.length - 1];
+    const joins =
+      !!prev &&
+      !!ps[prev[0]].english &&
+      !!ps[g[0]].english &&
+      span(prev) < joinBelow &&
+      span([...prev, ...g]) <= max &&
+      ps[g[0]].start - ps[prev[prev.length - 1]].end < LONG_PAUSE_SEC;
+    if (joins) prev.push(...g);
+    else runs.push([...g]);
+  }
+  return runs;
 }
 
 /** Plays a phrase once for context before the drill picks up after it. */

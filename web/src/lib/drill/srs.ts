@@ -30,10 +30,30 @@ export function dayStart(day: number): number {
   return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), DAY_START_HOUR).getTime();
 }
 
-/** When a passage that reached `level` at time `at` is next due. */
-export function dueAfter(level: number, at: number): number {
+/**
+ * Picks the day a review lands on, from `days` (consecutive day numbers around `base`, the day
+ * its interval gives), for a passage that has just reached `level`.
+ */
+export type DayChooser = (days: number[], base: number, level: number) => number;
+
+/** How far a review may move from its planned day onto a lighter one: not at all for gaps under a week, then about a tenth of the gap. */
+export function spreadDays(intervalDays: number): number {
+  return intervalDays < 7 ? 0 : Math.max(1, Math.round(intervalDays / 10));
+}
+
+/**
+ * When a passage that reached `level` at time `at` is next due. With `choose`, a long gap may
+ * stretch or shrink a little (see spreadDays) to land on the day it picks.
+ */
+export function dueAfter(level: number, at: number, choose?: DayChooser): number {
   if (level <= 0) return at + NEXT_SESSION_MS;
-  return dayStart(dayNumber(at) + INTERVAL_DAYS[Math.min(level, MAX_LEVEL)]);
+  const interval = INTERVAL_DAYS[Math.min(level, MAX_LEVEL)];
+  const base = dayNumber(at) + interval;
+  const spread = choose ? spreadDays(interval) : 0;
+  if (!choose || spread === 0) return dayStart(base);
+  const days = Array.from({ length: 2 * spread + 1 }, (_, k) => base - spread + k);
+  const day = choose(days, base, level);
+  return dayStart(days.includes(day) ? day : base);
 }
 
 export function isLearned(p: DrillPassage): boolean {
@@ -56,27 +76,28 @@ export function learnedPassage(p: DrillPassage, now: number): DrillPassage {
 }
 
 /**
- * Whether a review passes: at most one missed phrase, or none in a passage of three phrases or
- * fewer, where one miss is a large share.
+ * Whether a review passes: at most one missed cue, or none in a passage of three cues or fewer,
+ * where one miss is a large share. (A cue covers a phrase at first, more as the passage matures.)
  */
-export function reviewPasses(misses: number, phrases: number): boolean {
-  return misses === 0 || (misses === 1 && phrases >= 4);
+export function reviewPasses(misses: number, cues: number): boolean {
+  return misses === 0 || (misses === 1 && cues >= 4);
 }
 
 /**
  * A passage after a review. Passing moves it up a level; if it passed after a longer gap than
  * planned (a missed day, say), it moves up to the level matching the gap it survived, so time off
  * doesn't cost extra reviews of what's still remembered. Failing moves it down one level.
+ * `choose` can move a long gap's next review onto a lighter day (see dueAfter).
  */
-export function reviewedPassage(p: DrillPassage, passed: boolean, now: number): DrillPassage {
+export function reviewedPassage(p: DrillPassage, passed: boolean, now: number, choose?: DayChooser): DrillPassage {
   const level = p.level ?? 0;
   const reviews = (p.reviews ?? 0) + 1;
   if (!passed) {
     const down = Math.max(0, level - 1);
-    return { ...p, level: down, due: dueAfter(down, now), last: now, reviews, lapses: (p.lapses ?? 0) + 1 };
+    return { ...p, level: down, due: dueAfter(down, now, choose), last: now, reviews, lapses: (p.lapses ?? 0) + 1 };
   }
   const gapDays = p.last === undefined ? 0 : dayNumber(now) - dayNumber(p.last);
   let next = Math.min(MAX_LEVEL, level + 1);
   while (next < MAX_LEVEL && INTERVAL_DAYS[next] <= gapDays) next++;
-  return { ...p, level: next, due: dueAfter(next, now), last: now, reviews };
+  return { ...p, level: next, due: dueAfter(next, now, choose), last: now, reviews };
 }

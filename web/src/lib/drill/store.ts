@@ -105,11 +105,16 @@ export async function setSchedule(uid: string, language: string, schedule: Drill
   await setDoc(prefsDoc(uid), { schedules: { [language]: clean } }, { mergeFields: [`schedules.${language}`] });
 }
 
+const toLog = (d: QueryDocumentSnapshot<DocumentData>): DrillSessionLog => ({ id: d.id, ...(d.data() as Omit<DrillSessionLog, "id">) });
+
 /** Sessions started since `since` (ms), live. */
 export function subscribeRecentSessions(uid: string, since: number, cb: (logs: DrillSessionLog[]) => void): Unsubscribe {
-  return onSnapshot(query(sessionsCollection(uid), where("startedAt", ">=", since)), (snap) =>
-    cb(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<DrillSessionLog, "id">) }))),
-  );
+  return onSnapshot(query(sessionsCollection(uid), where("startedAt", ">=", since)), (snap) => cb(snap.docs.map(toLog)));
+}
+
+/** Sessions started since `since` (ms), once. */
+export async function getRecentSessions(uid: string, since: number): Promise<DrillSessionLog[]> {
+  return (await getDocs(query(sessionsCollection(uid), where("startedAt", ">=", since)))).docs.map(toLog);
 }
 
 /** Records the start of a session; returns its id for updateSessionLog. */

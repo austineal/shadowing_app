@@ -10,6 +10,7 @@ import {
   overdueRatio,
   reviewPasses,
   reviewedPassage,
+  spreadDays,
 } from "./srs";
 
 // 2026-03-10 18:00 local time: a Tuesday evening, away from any clock change.
@@ -39,6 +40,41 @@ describe("dueAfter", () => {
     expect(dueAfter(1, evening)).toBe(new Date(2026, 2, 11, 4).getTime());
     expect(dueAfter(2, evening)).toBe(new Date(2026, 2, 13, 4).getTime());
     expect(dueAfter(3, evening)).toBe(new Date(2026, 2, 17, 4).getTime());
+  });
+});
+
+describe("dueAfter: spreading reviews", () => {
+  const lightest = (load: Record<number, number>) => (days: number[]) =>
+    [...days].sort((a, b) => (load[a] ?? 0) - (load[b] ?? 0))[0];
+
+  it("leaves gaps under a week alone", () => {
+    expect(spreadDays(3)).toBe(0);
+    expect(dueAfter(2, evening, () => 0)).toBe(dueAfter(2, evening));
+  });
+
+  it("lets longer gaps move by about a tenth", () => {
+    expect([7, 15, 30, 60, 240].map(spreadDays)).toEqual([1, 2, 3, 6, 24]);
+    const base = dayNumber(evening) + 30;
+    let offered: number[] = [];
+    const due = dueAfter(5, evening, (days) => {
+      offered = days;
+      return base + 2;
+    });
+    expect(offered).toEqual([base - 3, base - 2, base - 1, base, base + 1, base + 2, base + 3]);
+    expect(due).toBe(dayStart(base + 2));
+  });
+
+  it("keeps the planned day if the chooser picks one it wasn't offered", () => {
+    expect(dueAfter(3, evening, () => 0)).toBe(dueAfter(3, evening));
+  });
+
+  it("applies to the review after a pass and after a fail", () => {
+    const base = dayNumber(at(0, 8)) + 15;
+    const choose = lightest({ [base]: 600, [base - 1]: 100 });
+    const passed = reviewedPassage({ start: 0, end: 40, level: 3, last: at(-7, 8), due: at(0, 4) }, true, at(0, 8), choose);
+    expect(passed.due).toBe(dayStart(base - 2));
+    const failed = reviewedPassage({ start: 0, end: 40, level: 5, last: at(-30, 8), due: at(0, 4) }, false, at(0, 8), choose);
+    expect(failed).toMatchObject({ level: 4, due: dayStart(base - 2) });
   });
 });
 
@@ -78,7 +114,7 @@ describe("reviewedPassage", () => {
 });
 
 describe("reviewPasses", () => {
-  it("allows one miss in a passage of four phrases or more", () => {
+  it("allows one missed cue in a passage of four cues or more", () => {
     expect(reviewPasses(0, 6)).toBe(true);
     expect(reviewPasses(1, 6)).toBe(true);
     expect(reviewPasses(2, 6)).toBe(false);
