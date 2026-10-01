@@ -65,12 +65,12 @@ describe("planSession: decks", () => {
     expect(CARD_BATCH).toBe(5);
   });
 
-  it("only learns from lessons up to the limit", () => {
-    const d = deck("a", [{ ...due, lesson: 0 }, fresh(0), fresh(1), fresh(1), fresh(2)], { lessonLimit: 1 });
+  it("names a batch's lesson and carries on into the next lessons", () => {
+    const d = deck("a", [{ ...due, lesson: 0 }, fresh(0), fresh(1), fresh(1), fresh(2)]);
     const plan = planSession({ now, budgetSec: 3600, newMaterial: true, opts, drills: [d], random: keep });
-    expect(plan.blocks.filter((b) => b.kind === "learn").flatMap((b) => b.cards)).toEqual([1, 2, 3]);
+    expect(plan.blocks.filter((b) => b.kind === "learn").flatMap((b) => b.cards)).toEqual([1, 2, 3, 4]);
     expect(plan.blocks.find((b) => b.kind === "learn")?.passageTitle).toBe("Level 1");
-    expect(frontier({ ...d.drill, passages: d.drill.passages.map((p) => ({ ...p, level: p.lesson! < 2 ? 0 : undefined })) })).toBe(-1);
+    expect(frontier(d.drill)).toBe(1);
   });
 
   it("shares the time for new material with an excerpt", () => {

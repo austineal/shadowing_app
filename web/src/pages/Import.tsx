@@ -208,7 +208,7 @@ function DeckForm({ uid, language, folderId }: { uid: string; language: string; 
     <div>
       <p className="small muted" style={{ marginTop: 0 }}>
         A CSV with a row per card (its audio file, the sentence, and optionally English audio, English text and a lesson), and
-        the audio files it names. The cards are joined into one recording and drilled card by card, in shuffled order.
+        the audio files it names. The cards are joined into one recording and added to your drills, to learn card by card.
       </p>
       <div className="field">
         <label>Card list (CSV or TSV)</label>

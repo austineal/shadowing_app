@@ -65,11 +65,6 @@ export async function createDrill(uid: string, drill: Omit<Drill, "id" | "create
   return ref.id;
 }
 
-/** For a deck: which lessons new cards may come from (null: all of them). */
-export async function setLessonLimit(uid: string, id: string, lessonLimit: number | null): Promise<void> {
-  await updateDoc(drillDoc(uid, id), { lessonLimit });
-}
-
 export async function deleteDrill(uid: string, id: string): Promise<void> {
   await deleteDoc(drillDoc(uid, id));
 }

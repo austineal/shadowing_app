@@ -249,7 +249,7 @@ export function cardPassages(segments: Segment[], lessons: string[], random: () 
 }
 
 /** Starts drilling a deck: every card, learned in the order cardPassages gives. */
-export async function createCardsDrill(uid: string, episode: Episode, language: string, segments: Segment[], lessonLimit: number | null) {
+export async function createCardsDrill(uid: string, episode: Episode, language: string, segments: Segment[]) {
   const lessons = deckLessons(segments);
   return createDrill(uid, {
     kind: "cards",
@@ -261,7 +261,6 @@ export async function createCardsDrill(uid: string, episode: Episode, language: 
     end: episode.durationSec ?? Math.max(...segments.map((s) => s.enEnd ?? s.end)),
     passages: cardPassages(segments, lessons),
     lessons,
-    lessonLimit,
     learning: null,
   });
 }

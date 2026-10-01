@@ -348,7 +348,7 @@ function SessionView(props: { uid: string; language: string; prepared: Prepared;
   const reviews = plan.blocks.filter((b) => b.kind === "review" && !b.cards).length;
   const cardReviews = plan.blocks.reduce((n, b) => n + (b.kind === "review" && b.cards ? b.cards.length : 0), 0);
   const learning = plan.blocks.filter((b): b is LearnBlock => b.kind === "learn" && !b.cards);
-  // New cards by deck and lesson: "5 new cards from WaniKani sentences (Level 3)".
+  // New cards by deck and lesson: "5 new cards from Sentence deck (Lesson 3)".
   const newCards = new Map<string, number>();
   for (const b of plan.blocks) {
     if (b.kind !== "learn" || !b.cards) continue;
