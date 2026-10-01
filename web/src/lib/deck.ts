@@ -231,9 +231,10 @@ export function cardPassages(segments: Segment[], random: () => number = Math.ra
 }
 
 /** Starts drilling a deck: every card, learned in the shuffled order cardPassages gives. */
-export async function createCardsDrill(uid: string, episode: Episode, language: string, segments: Segment[]) {
+export async function createCardsDrill(uid: string, episode: Episode, language: string, segments: Segment[], schedule: string) {
   return createDrill(uid, {
     kind: "cards",
+    schedule,
     episodeId: episode.id,
     episodeTitle: episode.title,
     title: episode.title,
