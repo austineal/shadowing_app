@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { cueGroups, cueSize, drillOptions, speakSeconds, testSteps, type SessionPhrase } from "./steps";
+import {
+  ANNOUNCE_CHIME_SEC,
+  announceSteps,
+  cueGroups,
+  cueSize,
+  drillOptions,
+  englishSeconds,
+  speakSeconds,
+  stepsSeconds,
+  testSteps,
+  type SessionPhrase,
+} from "./steps";
 
 describe("speakSeconds", () => {
   it("gives more time early on, and extra on request", () => {
@@ -21,6 +32,15 @@ describe("testSteps", () => {
   it("leaves two seconds after the answer to press Missed", () => {
     const steps = testSteps("ep", [{ start: 0, end: 4, text: "x", english: "y" }], 0, drillOptions("full", { paddingMs: 0, gapFactor: 1 }));
     expect(steps[steps.length - 1]).toMatchObject({ cue: "answer", play: { kind: "silence", sec: 2 } });
+  });
+});
+
+describe("announceSteps", () => {
+  it("plays a chime and the words, then pauses, showing the words without the full stop", () => {
+    const steps = announceSteps("Now shadow along.");
+    expect(steps.map((s) => s.label)).toEqual(["Now shadow along", "Now shadow along"]);
+    const opts = drillOptions("full", { paddingMs: 0, gapFactor: 1 });
+    expect(stepsSeconds(steps, opts)).toBeCloseTo(ANNOUNCE_CHIME_SEC + englishSeconds("Now shadow along.") + 0.5);
   });
 });
 

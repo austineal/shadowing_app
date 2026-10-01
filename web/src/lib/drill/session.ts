@@ -6,6 +6,8 @@
  */
 import { reviewPasses } from "./srs";
 import {
+  ANNOUNCE,
+  announceSteps,
   cueGroups,
   cueSize,
   hasEnglish,
@@ -55,7 +57,7 @@ export interface LearnBlock extends BlockBase {
 export type Block = ReviewBlock | LearnBlock;
 
 export interface Unit {
-  kind: "lead-in" | "learn" | "test" | "fixup" | "listen" | "shadow";
+  kind: "announce" | "lead-in" | "learn" | "test" | "fixup" | "listen" | "shadow";
   steps: Step[];
   /** Tests: the phrases tested (indices into the block's phrases), whether the result counts, and which retry this is. */
   test?: { phrases: number[]; graded: boolean; attempt: number };
@@ -101,6 +103,19 @@ function fixupUnit(block: Block, missed: Unit, opts: DrillOptions): Unit {
   };
 }
 
+const announceUnit = (text: string): Unit => ({ kind: "announce", steps: announceSteps(text) });
+
+/** What's announced as a block starts: the kind of work and, when it has one, the passage's title. */
+export function blockAnnouncement(block: Block): string {
+  const [what, untitled] =
+    block.kind === "review"
+      ? ["Review", "Review."]
+      : block.from === 0
+        ? ["New passage", "New passage."]
+        : ["Continuing", "Continuing the passage."];
+  return block.passageTitle ? `${what}: ${block.passageTitle}.` : untitled;
+}
+
 function leadInUnit(block: Block): Unit | undefined {
   const p = block.kind === "learn" && block.from > 0 ? block.phrases[block.from - 1] : block.leadIn;
   return p ? { kind: "lead-in", steps: leadInSteps(block.episodeId, p) } : undefined;
@@ -116,27 +131,33 @@ export function learnGroupUnits(block: LearnBlock, k: number, opts: DrillOptions
   return units;
 }
 
+/** Shadowing a whole passage, announced. */
+const shadowUnits = (block: Block): Unit[] => [
+  announceUnit(ANNOUNCE.shadow),
+  { kind: "shadow", steps: shadowSteps(block.episodeId, block.phrases) },
+];
+
 /** Finishing a passage: every phrase from its English, in order, then the whole passage to shadow. */
 export function wrapUpUnits(block: LearnBlock, opts: DrillOptions): Unit[] {
-  const units: Unit[] = [];
-  block.phrases.forEach((p, i) => {
-    if (p.english) units.push(testUnit(block, [i], false, opts));
-  });
-  units.push({ kind: "shadow", steps: shadowSteps(block.episodeId, block.phrases) });
-  return units;
+  const tests = block.phrases.flatMap((p, i) => (p.english ? [testUnit(block, [i], false, opts)] : []));
+  return [...(tests.length ? [announceUnit(ANNOUNCE.wrapUp), ...tests] : []), ...shadowUnits(block)];
+}
+
+/** A block opens with an announcement of what it is, then its lead-in. */
+function openingUnits(block: Block): Unit[] {
+  const lead = leadInUnit(block);
+  return [announceUnit(blockAnnouncement(block)), ...(lead ? [lead] : [])];
 }
 
 export function blockUnits(block: Block, opts: DrillOptions): Unit[] {
-  const units: Unit[] = [];
-  const lead = leadInUnit(block);
-  if (lead) units.push(lead);
+  const units = openingUnits(block);
   if (block.kind === "review") {
     for (const g of cueGroups(block.phrases, cueSize(block.level))) {
       const p = block.phrases[g[0]];
       // A phrase without English can't be tested, so it's just heard and repeated.
       units.push(p.english ? testUnit(block, g, true, opts) : { kind: "listen", steps: repeatSteps(block.episodeId, [p], opts, 1) });
     }
-    units.push({ kind: "shadow", steps: shadowSteps(block.episodeId, block.phrases) });
+    units.push(...shadowUnits(block));
     return units;
   }
   for (let k = block.from; k < block.to; k++) units.push(...learnGroupUnits(block, k, opts));
@@ -157,9 +178,22 @@ export const blockSeconds = (block: Block, opts: DrillOptions) => unitsSeconds(b
 export const learnGroupSeconds = (block: LearnBlock, k: number, opts: DrillOptions) =>
   unitsSeconds(block, learnGroupUnits(block, k, opts), opts);
 export const wrapUpSeconds = (block: LearnBlock, opts: DrillOptions) => unitsSeconds(block, wrapUpUnits(block, opts), opts);
-export function leadInSeconds(block: Block, opts: DrillOptions): number {
-  const u = leadInUnit(block);
-  return u ? stepsSeconds(u.steps, opts) : 0;
+/** Time for a block's announcement and lead-in. */
+export function openingSeconds(block: Block, opts: DrillOptions): number {
+  return openingUnits(block).reduce((sum, u) => sum + stepsSeconds(u.steps, opts), 0);
+}
+
+/** Every English text a session speaks, cues and announcements, to synthesise before it starts. */
+export function sessionEnglish(blocks: Block[], opts: DrillOptions): string[] {
+  if (blocks.length === 0) return [];
+  const texts = new Set<string>();
+  for (const b of blocks) {
+    for (const u of blockUnits(b, opts)) {
+      for (const { play } of u.steps) if ((play.kind === "english" || play.kind === "announce") && play.text) texts.add(play.text);
+    }
+  }
+  texts.add(ANNOUNCE.end);
+  return [...texts];
 }
 
 /** What a Missed press did. */
@@ -239,13 +273,13 @@ export class DrillSession {
   /**
    * The test just answered, when a press now would be a late one for it: while the English that
    * opens the next unit plays, whether that's the next test's cue (the learner hasn't been asked
-   * to say it yet) or the next phrase's meaning when learning.
+   * to say it yet), the next phrase's meaning when learning, or an announcement.
    */
   private lateTarget(): Unit | undefined {
     const unit = this.units[this.unitIndex];
     const prev = this.units[this.unitIndex - 1];
     if (!unit || !prev?.test || prev.missed) return undefined;
-    return unit.steps.slice(0, this.stepIndex + 1).every((s) => s.cue === "english") ? prev : undefined;
+    return unit.steps.slice(0, this.stepIndex + 1).every((s) => s.cue === "english" || s.cue === "announce") ? prev : undefined;
   }
 
   /**

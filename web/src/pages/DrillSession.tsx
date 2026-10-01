@@ -276,8 +276,8 @@ function SessionView(props: { uid: string; language: string; prepared: Prepared;
     if (!("mediaSession" in navigator) || !cur || !started) return;
     try {
       navigator.mediaSession.metadata = new MediaMetadata({
-        title: cur.step.text ?? cur.step.english ?? CUE_LABEL[cur.step.cue],
-        artist: CUE_LABEL[cur.step.cue],
+        title: cur.step.label ?? cur.step.text ?? cur.step.english ?? CUE_LABEL[cur.step.cue],
+        artist: cur.step.label ? "Drill" : CUE_LABEL[cur.step.cue],
         album: cur.block.passageTitle ? `${cur.block.title}: ${cur.block.passageTitle}` : cur.block.title,
       });
     } catch {
@@ -360,7 +360,7 @@ function SessionView(props: { uid: string; language: string; prepared: Prepared;
               {cur.block.passageCount}
               {cur.block.passageTitle && <div className="drill-passage-title">{cur.block.passageTitle}</div>}
             </div>
-            <div className={`drill-cue cue-${cur.step.cue}`}>{CUE_LABEL[cur.step.cue]}</div>
+            <div className={`drill-cue cue-${cur.step.cue}`}>{cur.step.label ?? CUE_LABEL[cur.step.cue]}</div>
             <div className="drill-english">{cur.step.english ?? ""}</div>
             <div className="drill-text">{cur.step.phrases ? phraseAt(cur.step.phrases, player.position).text : (cur.step.text ?? "")}</div>
           </div>

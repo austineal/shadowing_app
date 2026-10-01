@@ -169,7 +169,12 @@ unaffected.
   way, each passage is headed by its title and stage, and a line marks how far it's
   learned.
 - **Screen off.** The English is synthesised on the device before a session starts,
-  and the session plays through the same background graph as practice.
+  and the session plays through the same background graph as practice. A chime and a
+  few words in the English voice announce each change of activity, so a session can be
+  followed without the screen: each passage's start ("Review: …", "New passage: …" or
+  "Continuing: …", with the passage's title), the run-through of a newly learned
+  passage, shadowing, and the end of the session. The chime sets these apart from the
+  English cues.
 - **English clips are kept** in Cache Storage (`tts-clips`, 16-bit audio) and made
   ahead while the library is open: each scheduled language's next session is planned
   and any English not yet stored is synthesised, so sessions start at once and work
