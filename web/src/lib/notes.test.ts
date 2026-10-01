@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { highlightSpans, visibleNotes } from "./notes";
+import { highlightSpans, isKnownNote, visibleNotes } from "./notes";
 import type { PhraseStudy, StudyNote } from "../types";
 
 const note = (span: string, level: StudyNote["level"] = "B2", kind: StudyNote["kind"] = "vocab"): StudyNote => ({
@@ -39,5 +39,23 @@ describe("visibleNotes", () => {
   it("hides notes below the phrase's study level but keeps transcription notes", () => {
     const notes = [note("a", "A2"), note("b", "B2"), note("c", "C1"), note("d", "A2", "transcription")];
     expect(visibleNotes(p(notes)).map((n) => n.span)).toEqual(["b", "c", "d"]);
+  });
+});
+
+describe("isKnownNote", () => {
+  const n = (kind: StudyNote["kind"], span: string, title: string) => ({ kind, span, title });
+  const known = [n("grammar", "je sais pas", "Dropped “ne”"), n("vocab", "Truc", "Truc")];
+  it("matches the same title whatever the span", () => {
+    expect(isKnownNote(n("grammar", "c'est pas", "dropped  “ne”"), known)).toBe(true);
+  });
+  it("matches the same kind and span, ignoring case", () => {
+    expect(isKnownNote(n("vocab", "truc", "Thingy"), known)).toBe(true);
+    expect(isKnownNote(n("idiom", "truc", "Thingy"), known)).toBe(false);
+  });
+  it("never hides transcription notes", () => {
+    expect(isKnownNote(n("transcription", "truc", "Truc"), [n("transcription", "truc", "Truc")])).toBe(false);
+  });
+  it("ignores empty titles and spans", () => {
+    expect(isKnownNote(n("vocab", "", ""), [n("vocab", "", "")])).toBe(false);
   });
 });

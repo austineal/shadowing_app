@@ -56,6 +56,20 @@ export interface StudyNote {
 }
 
 /**
+ * A study point the learner has said they already know, at users/{uid}/knownNotes/{id}. Notes on
+ * the same point are hidden, and Claude is told to leave it out of new material.
+ */
+export interface KnownNote {
+  id: string;
+  lang: string;
+  kind: StudyNote["kind"];
+  span: string;
+  title: string;
+  /** Milliseconds since the epoch. */
+  at: number;
+}
+
+/**
  * Study material for one phrase text, at users/{uid}/phrases/{key} (see phraseKey). Shared by
  * every episode (and segment) with the same text in the same language.
  */

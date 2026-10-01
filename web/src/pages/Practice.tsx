@@ -30,7 +30,6 @@ import { OfflineButton } from "../components/OfflineButton";
 import { PassageLabel } from "../components/PassageMap";
 import { StudySection } from "../components/StudySection";
 import { PhraseStudySheet } from "../components/PhraseStudySheet";
-import { visibleNotes } from "../lib/notes";
 import { prepareStudy } from "../lib/study";
 import { DEFAULT_ENGLISH_VOICE } from "../lib/tts/client";
 import { MAX_REPEATS, REPEAT_PRESETS, type Episode, type PracticeSettings, type Segment, type SegmentsDoc, type TimedToken } from "../types";
@@ -460,7 +459,7 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
                   {s.text}
                   {(() => {
                     const p = study.phraseAt(i);
-                    return p && visibleNotes(p).length > 0 ? <span className="note-dot" aria-label="Has notes" /> : null;
+                    return p && study.shownNotes(p).length > 0 ? <span className="note-dot" aria-label="Has notes" /> : null;
                   })()}
                 </button>
                 {editing && (
@@ -583,7 +582,7 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
               )}
               {study.enabled && (
                 <button className="btn small" disabled={!currentStudy} onClick={openStudy} title="Translation, notes and questions">
-                  Study{currentStudy && visibleNotes(currentStudy).length > 0 ? ` · ${visibleNotes(currentStudy).length}` : ""}
+                  Study{currentStudy && study.shownNotes(currentStudy).length > 0 ? ` · ${study.shownNotes(currentStudy).length}` : ""}
                 </button>
               )}
               <select
@@ -617,7 +616,14 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
       )}
 
       {sheetPhrase && (
-        <PhraseStudySheet uid={uid} episodeId={episode.id} phrase={sheetPhrase} onClose={() => setStudyIndex(undefined)} />
+        <PhraseStudySheet
+          uid={uid}
+          episodeId={episode.id}
+          language={language}
+          phrase={sheetPhrase}
+          known={study.known}
+          onClose={() => setStudyIndex(undefined)}
+        />
       )}
 
       {showSettings && (

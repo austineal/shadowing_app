@@ -1,8 +1,8 @@
-import { collection, deleteField, doc, onSnapshot, query, setDoc, updateDoc, where, type Unsubscribe } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, deleteField, doc, onSnapshot, query, setDoc, updateDoc, where, type Unsubscribe } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../firebase";
 import { updateEpisode } from "./episodes";
-import type { CefrLevel, PhraseStudy } from "../types";
+import type { CefrLevel, KnownNote, PhraseStudy, StudyNote } from "../types";
 
 /** Must match normalizePhrase in functions/src/study.ts. */
 export function normalizePhrase(text: string): string {
@@ -31,6 +31,26 @@ export function subscribeEpisodePhrases(
     (snap) => cb(new Map(snap.docs.map((d) => [d.id, { key: d.id, ...(d.data() as Omit<PhraseStudy, "key">) }]))),
     onError,
   );
+}
+
+/** Points the learner has marked as known in one language, live. */
+export function subscribeKnownNotes(uid: string, language: string, cb: (known: KnownNote[]) => void): Unsubscribe {
+  const q = query(collection(db, "users", uid, "knownNotes"), where("lang", "==", language));
+  return onSnapshot(q, (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<KnownNote, "id">) }))));
+}
+
+export async function markNoteKnown(uid: string, language: string, note: StudyNote): Promise<void> {
+  await addDoc(collection(db, "users", uid, "knownNotes"), {
+    lang: language,
+    kind: note.kind,
+    span: note.span,
+    title: note.title,
+    at: Date.now(),
+  });
+}
+
+export async function unmarkKnown(uid: string, ids: string[]): Promise<void> {
+  await Promise.all(ids.map((id) => deleteDoc(doc(db, "users", uid, "knownNotes", id))));
 }
 
 const levelsDoc = (uid: string) => doc(db, "users", uid, "prefs", "study");

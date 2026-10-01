@@ -1,4 +1,4 @@
-import { CEFR_LEVELS, type PhraseStudy, type StudyNote } from "../types";
+import { CEFR_LEVELS, type KnownNote, type PhraseStudy, type StudyNote } from "../types";
 
 /**
  * Notes worth showing: those at or above the level the phrase was studied for. The server now
@@ -8,6 +8,28 @@ import { CEFR_LEVELS, type PhraseStudy, type StudyNote } from "../types";
 export function visibleNotes(p: PhraseStudy): StudyNote[] {
   const min = CEFR_LEVELS.indexOf(p.level);
   return p.notes.filter((n) => n.kind === "transcription" || CEFR_LEVELS.indexOf(n.level) >= min);
+}
+
+const normalize = (s: string) => s.normalize("NFC").toLowerCase().replace(/\s+/g, " ").trim();
+
+/**
+ * Whether a note is on a point the learner has marked as known: one with the same title, or the
+ * same kind and span. Transcription notes are about this phrase's text, so they never are.
+ * Must match isKnownNote in functions/src/claude.ts.
+ */
+export function isKnownNote(
+  n: Pick<StudyNote, "kind" | "span" | "title">,
+  known: Pick<KnownNote, "kind" | "span" | "title">[],
+): boolean {
+  if (n.kind === "transcription") return false;
+  const title = normalize(n.title);
+  const span = normalize(n.span);
+  return known.some((k) => (title && normalize(k.title) === title) || (span && k.kind === n.kind && normalize(k.span) === span));
+}
+
+/** The known points a note matches, so unmarking it can remove them all. */
+export function knownMatches<K extends Pick<KnownNote, "kind" | "span" | "title">>(n: StudyNote, known: K[]): K[] {
+  return known.filter((k) => isKnownNote(n, [k]));
 }
 
 export interface TextPart {
