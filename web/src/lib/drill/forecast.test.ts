@@ -14,7 +14,7 @@ import { dayNumber, learnedPassage } from "./srs";
 import { drillOptions } from "./steps";
 import type { DrillPassage, DrillSchedule } from "../../types";
 
-const opts = drillOptions("full", { paddingMs: 120, gapFactor: 1.3, slowRate: 0.75 });
+const opts = drillOptions("full", { paddingMs: 120, gapFactor: 1.3 });
 const schedule = (patch: Partial<DrillSchedule> = {}): DrillSchedule => ({
   perDay: 1,
   everyDays: 1,

@@ -3,7 +3,7 @@ import { drillMinutesPerAudioMinute, excerptMinutes, formatLearningTime, weeklyP
 import { drillOptions } from "./steps";
 import type { DrillSchedule, DrillSessionLog } from "../../types";
 
-const base = { paddingMs: 120, gapFactor: 1.3, slowRate: 0.75 };
+const base = { paddingMs: 120, gapFactor: 1.3 };
 const full = drillOptions("full", base);
 const light = drillOptions("light", base);
 const DAY = 86_400_000;

@@ -5,7 +5,7 @@ import { dayNumber } from "./srs";
 import { drillOptions, type SessionPhrase } from "./steps";
 import type { Drill, DrillPassage } from "../../types";
 
-const opts = drillOptions("full", { paddingMs: 120, gapFactor: 1.3, slowRate: 0.75 });
+const opts = drillOptions("full", { paddingMs: 120, gapFactor: 1.3 });
 const DAY = 86_400_000;
 const now = new Date(2026, 4, 10, 9).getTime();
 

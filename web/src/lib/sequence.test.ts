@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PAUSE_BEFORE_ENGLISH_SEC, gapSeconds, nextAction, sourceRate, stepsAfterSource } from "./sequence";
+import { PAUSE_BEFORE_ENGLISH_SEC, gapSeconds, nextAction, stepsAfterSource } from "./sequence";
 import { DEFAULT_SETTINGS, type PracticeSettings } from "../types";
 
 const s = (patch: Partial<PracticeSettings>): PracticeSettings => ({ ...DEFAULT_SETTINGS, ...patch });
@@ -12,37 +12,6 @@ describe("gapSeconds", () => {
   });
   it("never drops below 0.4s", () => {
     expect(gapSeconds({ ...seg, end: 10.05 }, s({ gapFactor: 1 }))).toBe(0.4);
-  });
-});
-
-describe("sourceRate", () => {
-  const auto = s({ mode: "auto", rate: 1, slowPlays: 2, slowRate: 0.75 });
-  it("slows the first plays in auto and loop modes", () => {
-    expect([1, 2, 3, 4].map((n) => sourceRate(auto, n))).toEqual([0.75, 0.75, 1, 1]);
-    expect(sourceRate({ ...auto, mode: "loop" }, 2)).toBe(0.75);
-  });
-  it("never slows manual plays", () => {
-    expect(sourceRate({ ...auto, mode: "manual" }, 1)).toBe(1);
-  });
-  it("is off at zero slow plays", () => {
-    expect(sourceRate({ ...auto, slowPlays: 0 }, 1)).toBe(1);
-  });
-  it("never speeds up past the normal rate", () => {
-    expect(sourceRate({ ...auto, rate: 0.7 }, 1)).toBe(0.7);
-  });
-  it("treats settings saved before slow plays existed as off", () => {
-    const old = { ...auto } as Partial<PracticeSettings>;
-    delete old.slowPlays;
-    delete old.slowRate;
-    expect(sourceRate(old as PracticeSettings, 1)).toBe(1);
-  });
-});
-
-describe("gapSeconds with slow plays", () => {
-  it("sizes the gap to the speed the phrase was played at", () => {
-    const auto = s({ mode: "auto", rate: 1, gapFactor: 1, slowPlays: 1, slowRate: 0.5 });
-    expect(gapSeconds(seg, auto, 1)).toBeCloseTo(4);
-    expect(gapSeconds(seg, auto, 2)).toBeCloseTo(2);
   });
 });
 

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { FolderSelect } from "../components/FolderSelect";
+import { ShowMore } from "../components/ShowMore";
+import { usePaged } from "../hooks/usePaged";
 import { LanguageSelect } from "../components/LanguageSelect";
 import { useFolders, useSubscriptions } from "../hooks/useLibrary";
 import { fetchFeed, importFeedEpisode, uploadEpisode, type FeedResult } from "../lib/episodes";
@@ -179,6 +181,7 @@ function FeedForm({ uid, language, folderId }: { uid: string; language: string; 
   // The URL the current feed was loaded from (the input may since have been edited).
   const [feedUrl, setFeedUrl] = useState("");
   const currentSub = subscriptions?.find((s) => s.feedUrl === feedUrl);
+  const paged = usePaged("import-feed", feed?.episodes ?? []);
 
   const load = async (u: string) => {
     setUrl(u);
@@ -292,7 +295,7 @@ function FeedForm({ uid, language, folderId }: { uid: string; language: string; 
             )}
           </div>
           <div className="list" style={{ padding: 0 }}>
-            {feed.episodes.map((ep) => (
+            {paged.shown.map((ep) => (
               <div key={ep.audioUrl} className="card">
                 <div className="body">
                   <div className="title">{ep.title}</div>
@@ -300,7 +303,7 @@ function FeedForm({ uid, language, folderId }: { uid: string; language: string; 
                     {ep.pubDate ? <span>{new Date(ep.pubDate).toLocaleDateString()}</span> : null}
                     {ep.durationSec ? <span>{formatDuration(ep.durationSec)}</span> : null}
                   </div>
-                  {ep.description ? <p className="small muted" style={{ marginTop: 4 }}>{ep.description}</p> : null}
+                  {ep.description ? <p className="small muted feed-desc">{ep.description}</p> : null}
                 </div>
                 <button
                   className="btn small primary"
@@ -311,6 +314,7 @@ function FeedForm({ uid, language, folderId }: { uid: string; language: string; 
                 </button>
               </div>
             ))}
+            <ShowMore paged={paged} />
           </div>
         </div>
       )}

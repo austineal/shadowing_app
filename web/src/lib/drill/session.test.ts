@@ -12,7 +12,7 @@ import {
 } from "./session";
 import { ANNOUNCE, drillOptions, type SessionPhrase } from "./steps";
 
-const opts = drillOptions("full", { paddingMs: 120, gapFactor: 1.3, slowRate: 0.75 });
+const opts = drillOptions("full", { paddingMs: 120, gapFactor: 1.3 });
 const phrase = (i: number, english = true): SessionPhrase => ({
   start: i * 8,
   end: i * 8 + 7,

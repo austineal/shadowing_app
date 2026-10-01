@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { LanguageSelect } from "../components/LanguageSelect";
+import { ShowMore } from "../components/ShowMore";
+import { usePaged } from "../hooks/usePaged";
 import { useEpisodes } from "../hooks/useEpisode";
 import { useSubscriptions } from "../hooks/useLibrary";
 import { fetchFeed, importFeedEpisode, type FeedResult } from "../lib/episodes";
@@ -42,6 +44,8 @@ export default function Podcast({ uid }: { uid: string }) {
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
   }, [sub, online, uid]);
+
+  const paged = usePaged(`feed:${id}`, feed?.episodes ?? []);
 
   const bySourceUrl = useMemo(() => {
     const m = new Map<string, Episode>();
@@ -136,7 +140,7 @@ export default function Podcast({ uid }: { uid: string }) {
 
       {feed && (
         <div className="list">
-          {feed.episodes.map((fe) => {
+          {paged.shown.map((fe) => {
             const imported = bySourceUrl.get(fe.audioUrl);
             const isNew = pubTime(fe.pubDate) > loaded!.seenUpTo;
             return (
@@ -148,11 +152,7 @@ export default function Podcast({ uid }: { uid: string }) {
                     {fe.pubDate ? <span>{new Date(fe.pubDate).toLocaleDateString()}</span> : null}
                     {fe.durationSec ? <span>{formatDuration(fe.durationSec)}</span> : null}
                   </div>
-                  {fe.description ? (
-                    <p className="small muted" style={{ marginTop: 4 }}>
-                      {fe.description}
-                    </p>
-                  ) : null}
+                  {fe.description ? <p className="small muted feed-desc">{fe.description}</p> : null}
                 </div>
                 {imported ? (
                   <Link to={`/episode/${imported.id}`} className="btn small">
@@ -170,6 +170,7 @@ export default function Podcast({ uid }: { uid: string }) {
               </div>
             );
           })}
+          <ShowMore paged={paged} />
         </div>
       )}
     </Shell>

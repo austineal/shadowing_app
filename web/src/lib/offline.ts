@@ -46,6 +46,23 @@ export async function isAudioCached(url: string | undefined): Promise<boolean> {
   return (await cache.match(url)) !== undefined;
 }
 
+/** The audio saved for offline use, looked up once for a whole list of episodes (see isSaved). */
+export async function savedAudioUrls(): Promise<Set<string>> {
+  if (!cacheSupported()) return new Set();
+  const cache = await caches.open(AUDIO_CACHE);
+  return new Set((await cache.keys()).map((r) => r.url));
+}
+
+/** Whether an episode's audio is among those from savedAudioUrls. */
+export function isSaved(saved: Set<string>, url: string | undefined): boolean {
+  if (!url) return false;
+  try {
+    return saved.has(new URL(url).href);
+  } catch {
+    return false;
+  }
+}
+
 export type ProgressFn = (loaded: number, total: number) => void;
 
 /** Downloads the full audio file and stores it so the service worker can serve it offline. */

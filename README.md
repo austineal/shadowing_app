@@ -12,6 +12,9 @@ desktop and installs to the Android home screen from Chrome.
   maximum length). Play each phrase, repeat it, loop it, or auto-advance with a
   pause sized to the phrase for you to speak in.
 - Split and merge phrases by hand. Position, settings and edits are saved.
+- The library groups episodes by language, then folder or podcast. Long groups show ten
+  episodes at a time, the search button finds episodes by title, podcast, folder or
+  language, and coming back from an episode returns to the same place in the list.
 
 ## Layout
 
@@ -85,9 +88,9 @@ of your episode list, phrases, settings and position, so anything you have
 opened once works offline. Edits made offline sync when you reconnect.
 
 Audio is not stored automatically because episodes are large. Tap **Save
-offline** on an episode (in the library, or in the practice settings sheet) to
-download its audio and word timings to the device. Saved episodes show
-**✓ Offline**; tap again to remove the copy. The library footer shows how much
+offline** in an episode's ⋯ menu in the library, or in the practice settings
+sheet, to download its audio and word timings to the device. Saved episodes show
+**✓ Offline**; tap the button again to remove the copy. The library footer shows how much
 device storage the app is using. Importing and transcribing always need a
 connection.
 
@@ -162,6 +165,9 @@ unaffected.
   move by about a tenth of the gap to the lightest nearby day, but only when its
   planned day would otherwise have more than about half its session time in reviews,
   so neighbouring passages usually keep coming up together.
+- **Coverage.** The library marks each episode with drill excerpts with how much of it they
+  cover ("5% in drills"), or "All in drills" once what's left outside them is no more
+  than an intro's worth (5 seconds or 5% of the episode).
 - **Progress map.** The library's **Drills** box and **Drill schedules** show each
   excerpt as a strip of its passages: being learned, just learned (level 0–1),
   growing (2–3) or solid (4 and up: still known after a week away), with due ones

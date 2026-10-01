@@ -10,14 +10,17 @@ export function formatTime(sec: number | undefined): string {
 
 export function formatDuration(sec: number | undefined): string {
   if (sec === undefined || !Number.isFinite(sec)) return "";
+  if (sec < 59.5) return `${Math.max(1, Math.round(sec))} s`;
   const m = Math.round(sec / 60);
   if (m < 60) return `${m} min`;
   return `${Math.floor(m / 60)} h ${m % 60} min`;
 }
 
+/** A day, with its year only when that isn't this year. */
 export function formatDate(d: Date | undefined | null): string {
   if (!d) return "";
-  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  const thisYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", ...(thisYear ? {} : { year: "numeric" }) });
 }
 
 export function titleFromFilename(name: string): string {

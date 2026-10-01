@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
-import { useDrillPrefs, useDrills, useNow, useRecentSessions } from "../hooks/useDrills";
+import { useNow } from "../hooks/useDrills";
 import { availability, type Availability } from "../lib/drill/cadence";
 import { formatNext } from "../lib/drill/labels";
 import { learningDrill } from "../lib/drill/plan";
@@ -45,11 +45,21 @@ function buildRows(prefs: DrillPrefs, drills: Drill[], sessions: DrillSessionLog
     );
 }
 
-/** The library's list of drill sessions: which languages are due now and when the others come up. */
-export function DrillToday({ uid }: { uid: string }) {
-  const prefs = useDrillPrefs(uid);
-  const drills = useDrills(uid);
-  const sessions = useRecentSessions(uid);
+/**
+ * The library's list of drill sessions: which languages are due now and when the others come up.
+ * The library loads the data, so it knows when this is in place (see useScrollMemory there).
+ */
+export function DrillToday({
+  uid,
+  prefs,
+  drills,
+  sessions,
+}: {
+  uid: string;
+  prefs?: DrillPrefs;
+  drills?: Drill[];
+  sessions?: DrillSessionLog[];
+}) {
   const now = useNow();
   const rows = prefs && drills && sessions ? buildRows(prefs, drills, sessions, now) : undefined;
 
