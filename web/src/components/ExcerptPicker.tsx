@@ -4,6 +4,7 @@ import { DEFAULT_SCHEDULE, formatMinutes } from "../lib/drill/labels";
 import { formatLearningTime, weeklyPace } from "../lib/drill/pace";
 import { phrasesIn, splitPassages } from "../lib/drill/passages";
 import { learningSeconds } from "../lib/drill/plan";
+import { logScheduleKey, scheduleForEpisode, scheduleLabel, schedulesOf } from "../lib/drill/schedules";
 import { drillOptions } from "../lib/drill/steps";
 import { createDrill, planDrillPassages, prepareDrillStudy, setSchedule } from "../lib/drill/store";
 import { formatTime } from "../lib/format";
@@ -40,6 +41,7 @@ export function ExcerptPicker(props: {
   const now = useNow();
   const [levels, setLevels] = useState<Record<string, CefrLevel>>({});
   useEffect(() => subscribeStudyLevels(uid, setLevels), [uid]);
+  const [chosenKey, setChosenKey] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string>();
   const [error, setError] = useState<string>();
@@ -79,7 +81,9 @@ export function ExcerptPicker(props: {
   const start = picked[0].start;
   const end = picked[picked.length - 1].end;
   const passages = splitPassages(picked);
-  const schedule = prefs?.schedules[language];
+  const keys = schedulesOf(prefs, language);
+  const key = chosenKey ?? scheduleForEpisode(prefs, language, props.existing);
+  const schedule = prefs?.schedules[key];
   const opts = drillOptions(schedule?.learning ?? "full", loadDefaultSettings(), schedule?.answerTime ?? 0);
   const learnSec = learningSeconds(
     passages.map((p) => phrasesIn(picked, p.start, p.end)),
@@ -87,7 +91,7 @@ export function ExcerptPicker(props: {
   );
   const pace = weeklyPace(
     schedule ?? DEFAULT_SCHEDULE,
-    (sessions ?? []).filter((l) => l.language === language),
+    (sessions ?? []).filter((l) => logScheduleKey(l, prefs) === key),
     opts,
     now,
   );
@@ -105,6 +109,7 @@ export function ExcerptPicker(props: {
         episodeTitle: episode.title,
         title: props.title,
         language,
+        schedule: key,
         start,
         end,
         passages,
@@ -112,9 +117,9 @@ export function ExcerptPicker(props: {
       });
       // Titled passages at natural break points replace the pause-based ones on the server when ready.
       void planDrillPassages(id).catch((e) => console.warn("Planning passages failed:", e));
-      let msg = `Added to your ${languageLabel(language)} drills. Claude is splitting it into titled passages.`;
+      let msg = `Added to your ${scheduleLabel(key, schedule)} drills. Claude is splitting it into titled passages.`;
       if (!schedule) {
-        await setSchedule(uid, language, DEFAULT_SCHEDULE);
+        await setSchedule(uid, key, DEFAULT_SCHEDULE);
         msg += ` ${languageLabel(language)} drills are now scheduled every day for 20 minutes; change that under Drill schedules in the library.`;
       }
       try {
@@ -144,8 +149,25 @@ export function ExcerptPicker(props: {
       </p>
       <p className="small muted">
         Learning it takes roughly {formatMinutes(learnSec)} of drilling plus reviews: {formatLearningTime(end - start, pace)} at your{" "}
-        {languageLabel(language)} pace.
+        {keys.length > 1 ? "this schedule's" : languageLabel(language)} pace.
       </p>
+      {keys.length > 1 && (
+        <label className="row small">
+          Schedule:
+          <select
+            className="input"
+            style={{ width: "auto", padding: "4px 8px", minHeight: 32 }}
+            value={key}
+            onChange={(e) => setChosenKey(e.target.value)}
+          >
+            {keys.map((k) => (
+              <option key={k} value={k}>
+                {scheduleLabel(k, prefs?.schedules[k])}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       {overlap && (
         <p className="small error">
           This overlaps an excerpt you're already drilling ({formatTime(overlap.start)}–{formatTime(overlap.end)}).

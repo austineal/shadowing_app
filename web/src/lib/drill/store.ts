@@ -1,5 +1,5 @@
 /**
- * Firestore storage for drills: excerpts at users/{uid}/drills/{id}, per-language schedules in
+ * Firestore storage for drills: excerpts at users/{uid}/drills/{id}, schedules in
  * users/{uid}/prefs/drill, and a log of sessions at users/{uid}/drillSessions/{id}.
  *
  * Writes made during a session aren't awaited: Firestore resolves them only once the server has
@@ -11,6 +11,7 @@ import {
   deleteDoc,
   deleteField,
   doc,
+  FieldPath,
   getDoc,
   getDocs,
   increment,
@@ -54,10 +55,11 @@ export async function getDrills(uid: string, language: string): Promise<Drill[]>
 }
 
 export async function createDrill(uid: string, drill: Omit<Drill, "id" | "createdAt">): Promise<string> {
-  const { title, ...rest } = drill;
+  const { title, schedule, ...rest } = drill;
   const ref = await addDoc(drillsCollection(uid), {
     ...rest,
     ...(title ? { title } : {}),
+    ...(schedule && schedule !== drill.language ? { schedule } : {}),
     passages: drill.passages.map(cleanPassage),
     learning: drill.learning ?? null,
     createdAt: Date.now(),
@@ -67,6 +69,11 @@ export async function createDrill(uid: string, drill: Omit<Drill, "id" | "create
 
 export async function deleteDrill(uid: string, id: string): Promise<void> {
   await deleteDoc(drillDoc(uid, id));
+}
+
+/** Moves a drill onto another schedule of its language; its language's code for the main one. */
+export async function setDrillSchedule(uid: string, drill: Pick<Drill, "id" | "language">, key: string): Promise<void> {
+  await updateDoc(drillDoc(uid, drill.id), { schedule: key === drill.language ? deleteField() : key });
 }
 
 export function saveDrillProgress(uid: string, drill: Pick<Drill, "id" | "passages" | "learning">): void {
@@ -96,14 +103,14 @@ export async function setDrillVoice(uid: string, voice: string): Promise<void> {
   await setDoc(prefsDoc(uid), { voice }, { merge: true });
 }
 
-/** Sets a language's schedule (replacing it whole), or removes it with null. */
-export async function setSchedule(uid: string, language: string, schedule: DrillSchedule | null): Promise<void> {
+/** Sets a schedule (replacing it whole), or removes it with null. `key` is the language code for its main one. */
+export async function setSchedule(uid: string, key: string, schedule: DrillSchedule | null): Promise<void> {
   if (!schedule) {
-    await setDoc(prefsDoc(uid), { schedules: { [language]: deleteField() } }, { merge: true });
+    await setDoc(prefsDoc(uid), { schedules: { [key]: deleteField() } }, { merge: true });
     return;
   }
-  const clean = Object.fromEntries(Object.entries(schedule).filter(([, v]) => v !== undefined)) as DrillSchedule;
-  await setDoc(prefsDoc(uid), { schedules: { [language]: clean } }, { mergeFields: [`schedules.${language}`] });
+  const clean = Object.fromEntries(Object.entries(schedule).filter(([, v]) => v !== undefined && v !== "")) as DrillSchedule;
+  await setDoc(prefsDoc(uid), { schedules: { [key]: clean } }, { mergeFields: [new FieldPath("schedules", key)] });
 }
 
 const toLog = (d: QueryDocumentSnapshot<DocumentData>): DrillSessionLog => ({ id: d.id, ...(d.data() as Omit<DrillSessionLog, "id">) });
@@ -118,11 +125,12 @@ export async function getRecentSessions(uid: string, since: number): Promise<Dri
   return (await getDocs(query(sessionsCollection(uid), where("startedAt", ">=", since)))).docs.map(toLog);
 }
 
-/** Records the start of a session; returns its id for updateSessionLog. */
-export function startSessionLog(uid: string, language: string, now: number): string {
+/** Records the start of a session of a schedule; returns its id for updateSessionLog. */
+export function startSessionLog(uid: string, language: string, schedule: string, now: number): string {
   const ref = doc(sessionsCollection(uid));
   void setDoc(ref, {
     language,
+    ...(schedule !== language ? { schedule } : {}),
     startedAt: now,
     endedAt: now,
     progress: 0,
