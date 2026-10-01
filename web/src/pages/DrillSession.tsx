@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { PhraseStudySheet } from "../components/PhraseStudySheet";
 import { playedSeconds, useDrillPlayer, type DrillAudioOptions } from "../hooks/useDrillPlayer";
+import { useDrillStudy } from "../hooks/useDrillStudy";
 import { useNow } from "../hooks/useDrills";
 import { synthesizeAll } from "../lib/drill/clips";
 import { bookedByDay, spreadReviews } from "../lib/drill/forecast";
@@ -8,9 +10,9 @@ import { CUE_LABEL, REVIEW_LABEL, formatDay, formatMinutes, formatNext } from ".
 import { frontier } from "../lib/drill/plan";
 import { prefetchDrillEnglish } from "../lib/drill/prefetch";
 import { prepareSession, type Prepared } from "../lib/drill/prepare";
-import { DrillSession, type LearnBlock, type SessionEvent } from "../lib/drill/session";
+import { DrillSession, type Block, type LearnBlock, type SessionEvent } from "../lib/drill/session";
 import { learnedPassage, reviewedPassage } from "../lib/drill/srs";
-import { cueSize, type DrillOptions, type SessionPhrase } from "../lib/drill/steps";
+import { cueSize, type DrillOptions, type SessionPhrase, type Step } from "../lib/drill/steps";
 import { scheduleLabel } from "../lib/drill/schedules";
 import { prepareDrillStudy, saveDrillProgress, startSessionLog, updateSessionLog } from "../lib/drill/store";
 import { formatTime } from "../lib/format";
@@ -216,6 +218,24 @@ function phraseAt(phrases: SessionPhrase[], t: number): SessionPhrase {
   return found;
 }
 
+/**
+ * The phrases whose text a step shows: the one playing in a span, or the run of the block's
+ * phrases (lead-in included) that makes up the step's text. None while the text is hidden.
+ */
+function shownPhrases(block: Block, step: Step, position: number): SessionPhrase[] {
+  if (step.phrases) return [phraseAt(step.phrases, position)];
+  if (!step.text) return [];
+  const ps = block.leadIn ? [block.leadIn, ...block.phrases] : block.phrases;
+  for (let i = 0; i < ps.length; i++) {
+    let text = "";
+    for (let j = i; j < ps.length && text.length < step.text.length; j++) {
+      text = text ? `${text} ${ps[j].text}` : ps[j].text;
+      if (text === step.text) return ps.slice(i, j + 1);
+    }
+  }
+  return [];
+}
+
 function SessionView(props: { uid: string; prepared: Prepared; onLearnAnyway: () => void }) {
   const { uid, prepared } = props;
   const { plan, opts, language } = prepared;
@@ -288,6 +308,37 @@ function SessionView(props: { uid: string; prepared: Prepared; onLearnAnyway: ()
   const player = useDrillPlayer(session, audioOpts);
   const started = player.state !== "idle";
 
+  // Study notes for the phrase on screen. The last phrase shown stays on offer while the next
+  // one's English plays, so opening notes never gives away an answer.
+  const episodeIds = useMemo(() => plan.blocks.map((b) => b.episodeId), [plan]);
+  const study = useDrillStudy(uid, language, episodeIds);
+  const [onScreen, setOnScreen] = useState<{ episodeId: string; texts: string[] }>();
+  const shown = player.current ? shownPhrases(player.current.block, player.current.step, player.position) : [];
+  const shownEpisode = player.current?.block.episodeId;
+  if (
+    shown.length > 0 &&
+    shownEpisode &&
+    (onScreen?.episodeId !== shownEpisode || onScreen.texts.join("\n") !== shown.map((p) => p.text).join("\n"))
+  ) {
+    setOnScreen({ episodeId: shownEpisode, texts: shown.map((p) => p.text) });
+  }
+  const withNotes = (onScreen?.texts ?? []).flatMap((t) => {
+    const p = study.withNotes(t);
+    return p ? [p] : [];
+  });
+  /** The phrase whose notes are open, and whether to carry on playing after. */
+  const [notesOpen, setNotesOpen] = useState<{ episodeId: string; text: string; resume: boolean }>();
+  const notesPhrase = notesOpen && study.phraseFor(notesOpen.text);
+  const openNotes = (text: string) => {
+    const resume = player.state === "playing";
+    if (resume) player.pause();
+    setNotesOpen({ episodeId: onScreen!.episodeId, text, resume });
+  };
+  const closeNotes = () => {
+    if (notesOpen?.resume) player.play();
+    setNotesOpen(undefined);
+  };
+
   const start = () => {
     recorder.start();
     player.play();
@@ -335,6 +386,7 @@ function SessionView(props: { uid: string; prepared: Prepared; onLearnAnyway: ()
   useEffect(() => {
     if (!started) return;
     const onKey = (e: KeyboardEvent) => {
+      if (document.querySelector(".sheet")) return; // the notes sheet is open
       if (e.key === " ") {
         e.preventDefault();
         if (player.state === "playing") player.pause();
@@ -416,7 +468,24 @@ function SessionView(props: { uid: string; prepared: Prepared; onLearnAnyway: ()
             <div className={`drill-cue cue-${cur.step.cue}`}>{cur.step.label ?? CUE_LABEL[cur.step.cue]}</div>
             <div className="drill-english">{cur.step.english ?? ""}</div>
             <div className="drill-text">{cur.step.phrases ? phraseAt(cur.step.phrases, player.position).text : (cur.step.text ?? "")}</div>
+            <div className="drill-notes">
+              {withNotes.map((p) => (
+                <button key={p.key} className="btn small" onClick={() => openNotes(p.text)}>
+                  {withNotes.length > 1 ? `Notes: ${p.text.length > 24 ? `${p.text.slice(0, 22)}…` : p.text}` : "Study notes"}
+                </button>
+              ))}
+            </div>
           </div>
+          {notesPhrase && (
+            <PhraseStudySheet
+              uid={uid}
+              episodeId={notesOpen.episodeId}
+              language={language}
+              phrase={notesPhrase}
+              known={study.known}
+              onClose={closeNotes}
+            />
+          )}
           <div className="dock">
             <div className="progress">
               <div style={{ width: `${Math.round(((cur.blockIndex + cur.unitIndex / cur.unitCount) / plan.blocks.length) * 100)}%` }} />
