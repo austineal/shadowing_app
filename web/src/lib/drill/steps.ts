@@ -15,10 +15,12 @@ export interface SessionPhrase {
 export type Play =
   | { kind: "source"; episodeId: string; start: number; end: number; rate: number }
   | { kind: "english"; text: string }
+  /** Spoken in the English voice too, after a chime (see announceSteps). */
+  | { kind: "announce"; text: string }
   | { kind: "silence"; sec: number };
 
 /** What the learner is doing during a step, which is what the screen shows. */
-export type Cue = "lead-in" | "english" | "speak" | "answer" | "listen" | "repeat" | "shadow";
+export type Cue = "announce" | "lead-in" | "english" | "speak" | "answer" | "listen" | "repeat" | "shadow";
 
 export interface Step {
   play: Play;
@@ -29,6 +31,8 @@ export interface Step {
   english?: string;
   /** For a span of several phrases: the phrases, so the screen can follow along. */
   phrases?: SessionPhrase[];
+  /** What the screen calls the step, in place of its cue's usual label: an announcement's own words. */
+  label?: string;
 }
 
 export interface DrillOptions {
@@ -191,6 +195,29 @@ export function cueGroups(ps: SessionPhrase[], size: CueSize): number[][] {
   return runs;
 }
 
+/** How long the chime before an announcement takes, before the words start. */
+export const ANNOUNCE_CHIME_SEC = 0.35;
+
+/** What the announcements between activities say (a passage's start is in blockAnnouncement). */
+export const ANNOUNCE = {
+  wrapUp: "Now the whole passage, from the English.",
+  shadow: "Now shadow along.",
+  end: "That's the end of the session.",
+};
+
+/**
+ * An announcement of what comes next: a chime, a few words in the English voice, and a moment's
+ * pause. With the screen off it's the only sign that the activity has changed; the chime sets it
+ * apart from the English cues, which are there to be translated.
+ */
+export function announceSteps(text: string): Step[] {
+  const label = text.replace(/[.:]$/, "");
+  return [
+    { play: { kind: "announce", text }, cue: "announce", label },
+    { play: { kind: "silence", sec: 0.5 }, cue: "announce", label },
+  ];
+}
+
 /** Plays a phrase once for context before the drill picks up after it. */
 export function leadInSteps(episodeId: string, p: SessionPhrase): Step[] {
   return [
@@ -216,6 +243,7 @@ export function stepSeconds(step: Step, opts: DrillOptions): number {
   const p = step.play;
   if (p.kind === "silence") return p.sec;
   if (p.kind === "english") return englishSeconds(p.text);
+  if (p.kind === "announce") return ANNOUNCE_CHIME_SEC + englishSeconds(p.text);
   return (p.end - p.start + 2 * opts.paddingSec) / p.rate;
 }
 

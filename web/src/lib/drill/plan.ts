@@ -9,8 +9,8 @@ import { bookNewPassage, forecastLoad, overfilledBy, type LoadDay, type SessionD
 import { phraseBefore, phrasesIn } from "./passages";
 import {
   blockSeconds,
-  leadInSeconds,
   learnGroupSeconds,
+  openingSeconds,
   wrapUpSeconds,
   type Block,
   type LearnBlock,
@@ -168,7 +168,7 @@ function planLearning(
       leadIn: joined ? undefined : phraseBefore(d.phrases, d.drill.passages[i].start),
     };
     if (b.phrases.length === 0) break;
-    let sec = leadInSeconds(block, opts);
+    let sec = openingSeconds(block, opts);
     let to = block.from;
     while (to < b.phrases.length) {
       const g = learnGroupSeconds(block, to, opts);

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createGraph, outputOf, schedule, startOutput, type Graph } from "../lib/audioGraph";
 import type { Current, DrillSession } from "../lib/drill/session";
-import type { Play } from "../lib/drill/steps";
+import { ANNOUNCE, ANNOUNCE_CHIME_SEC, type Play } from "../lib/drill/steps";
 
 export type DrillPlayerState = "idle" | "playing" | "paused" | "finished";
 
@@ -120,13 +120,15 @@ class DrillAudio {
   }
 
   /**
-   * A short tone confirming a press: two falling notes for Missed, a tick for Skip. It goes through
-   * the same output as everything else, so it's heard with the screen off too.
+   * A short tone: two falling notes confirming Missed, a tick confirming Skip, and two rising notes
+   * before an announcement. It goes through the same output as everything else, so it's heard with
+   * the screen off too.
    */
-  private chime(kind: "missed" | "skip") {
+  private chime(kind: "missed" | "skip" | "announce") {
     const g = this.graph;
     if (!g || g.ctx.state !== "running") return;
-    const notes = kind === "missed" ? [523, 392] : [1047];
+    const notes = { missed: [523, 392], skip: [1047], announce: [587, 880] }[kind];
+    const level = kind === "announce" ? 0.18 : 0.25;
     const t0 = g.ctx.currentTime + 0.01;
     notes.forEach((freq, i) => {
       const t = t0 + i * 0.13;
@@ -134,7 +136,7 @@ class DrillAudio {
       const gain = g.ctx.createGain();
       osc.frequency.value = freq;
       gain.gain.setValueAtTime(0.0001, t);
-      gain.gain.exponentialRampToValueAtTime(0.25, t + 0.015);
+      gain.gain.exponentialRampToValueAtTime(level, t + 0.015);
       gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
       osc.connect(gain);
       gain.connect(outputOf(g));
@@ -210,8 +212,9 @@ class DrillAudio {
     if (!cur) {
       this.playing = false;
       this.stopClock();
-      this.graph?.out.pause();
       this.on.state("finished");
+      // Say so, for anyone listening with the screen off, then let the output go quiet.
+      this.announce(ANNOUNCE.end, () => this.graph?.out.pause());
       return;
     }
     if (!this.playing) return;
@@ -223,7 +226,14 @@ class DrillAudio {
     const play = cur.step.play;
     if (play.kind === "silence") this.cancelStep = schedule(this.graph, play.sec, next);
     else if (play.kind === "english") this.playClip(play.text, next);
+    else if (play.kind === "announce") this.announce(play.text, next);
     else this.playSource(play, next);
+  }
+
+  /** A chime, then the words of an announcement (see announceSteps). */
+  private announce(text: string, next: () => void) {
+    this.chime("announce");
+    this.cancelStep = schedule(this.graph, ANNOUNCE_CHIME_SEC, () => this.playClip(text, next));
   }
 
   private playClip(text: string, next: () => void) {

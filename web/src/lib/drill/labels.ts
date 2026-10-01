@@ -25,6 +25,7 @@ export const SESSION_MINUTES = [10, 15, 20, 25, 30, 40, 45, 60];
 export const DEFAULT_SCHEDULE: DrillSchedule = { perDay: 1, everyDays: 1, minutes: 20, newMaterial: true, learning: "full" };
 
 export const CUE_LABEL: Record<Cue, string> = {
+  announce: "Next",
   "lead-in": "Lead-in",
   english: "English",
   speak: "Your turn: say it",

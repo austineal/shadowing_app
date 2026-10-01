@@ -12,7 +12,7 @@ import { sessionDays } from "./forecast";
 import { DEFAULT_SCHEDULE } from "./labels";
 import { phrasesIn } from "./passages";
 import { frontier, planSession, type PlanDrill, type SessionPlan } from "./plan";
-import type { Block } from "./session";
+import { sessionEnglish, type Block } from "./session";
 import { DAY_MS, isDue } from "./srs";
 import { drillOptions, type DrillOptions, type SessionPhrase } from "./steps";
 import { getDrillPrefs, getDrills, getRecentSessions, loadTranslations } from "./store";
@@ -26,7 +26,7 @@ export interface Prepared {
   voice: string;
   /** Audio URL of each episode the plan plays from (empty when not asked for). */
   sources: Record<string, string>;
-  /** English the plan needs spoken. */
+  /** English the plan needs spoken: its cues and announcements. */
   english: string[];
   /** Phrases in the plan with no translation yet; they can only be heard and repeated. */
   untranslated: number;
@@ -107,14 +107,7 @@ export async function prepareSession(uid: string, language: string, now: number,
       if (plan.blocks.some((b) => b.episodeId === episode.id)) sources[episode.id] = await ensureAudioUrl(uid, episode);
     }
   }
-  const needed = new Set<string>();
-  let untranslated = 0;
-  for (const b of plan.blocks) {
-    for (const p of blockPhrases(b)) {
-      if (p.english) needed.add(p.english);
-      else untranslated++;
-    }
-  }
+  const untranslated = plan.blocks.reduce((n, b) => n + blockPhrases(b).filter((p) => !p.english).length, 0);
   const upcoming = loaded.flatMap(({ drill }) => drill.passages.flatMap((p) => (p.level !== undefined && p.due ? [p.due] : [])));
   return {
     schedule,
@@ -123,7 +116,7 @@ export async function prepareSession(uid: string, language: string, now: number,
     drills: loaded.map((l) => l.drill),
     voice: drillVoice(prefs),
     sources,
-    english: [...needed],
+    english: sessionEnglish(plan.blocks, opts),
     untranslated,
     nextDue: upcoming.length ? Math.min(...upcoming) : undefined,
   };

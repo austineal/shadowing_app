@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { DrillSession, type Current, type LearnBlock, type Miss, type ReviewBlock, type SessionEvent } from "./session";
-import { drillOptions, type SessionPhrase } from "./steps";
+import {
+  DrillSession,
+  blockAnnouncement,
+  blockUnits,
+  sessionEnglish,
+  type Current,
+  type LearnBlock,
+  type Miss,
+  type ReviewBlock,
+  type SessionEvent,
+} from "./session";
+import { ANNOUNCE, drillOptions, type SessionPhrase } from "./steps";
 
 const opts = drillOptions("full", { paddingMs: 120, gapFactor: 1.3, slowRate: 0.75 });
 const phrase = (i: number, english = true): SessionPhrase => ({
@@ -62,15 +72,15 @@ const missFirstTry = (i: number) => (cur: Current) =>
   cur.unit.kind === "test" && cur.unit.test?.phrases.join() === String(i) && cur.step.cue === "speak";
 
 describe("DrillSession: review", () => {
-  it("plays a lead-in, tests each phrase from its English, then the whole passage", () => {
+  it("announces the passage, plays a lead-in, tests each phrase from its English, then announces the shadowing", () => {
     const { session, events } = start([review({ phrases: phrases(2) })]);
     expect(run(session)).toEqual([
-      "lead-in:lead-in",
-      "lead-in:lead-in",
+      ...["announce:announce", "announce:announce"],
+      ...["lead-in:lead-in", "lead-in:lead-in"],
       ...["test:english", "test:speak", "test:answer", "test:answer"],
       ...["test:english", "test:speak", "test:answer", "test:answer"],
-      "shadow:shadow",
-      "shadow:shadow",
+      ...["announce:announce", "announce:announce"],
+      ...["shadow:shadow", "shadow:shadow"],
     ]);
     expect(events).toEqual([expect.objectContaining({ kind: "reviewed", misses: 0, passed: true })]);
   });
@@ -111,7 +121,7 @@ describe("DrillSession: review", () => {
   it("just plays a phrase without English, and doesn't count it", () => {
     const ps = [phrase(0), phrase(1, false), phrase(2), phrase(3), phrase(4)];
     const { session, events } = start([review({ phrases: ps, leadIn: undefined })]);
-    const log = run(session, missFirstTry(0));
+    const log = run(session, missFirstTry(0)).filter((s) => !s.startsWith("announce"));
     expect(log.slice(0, 1)).toEqual(["test:english"]);
     expect(log).toContain("listen:listen");
     // One miss among four tested phrases still passes.
@@ -120,9 +130,11 @@ describe("DrillSession: review", () => {
 
   it("only accepts Missed during tests", () => {
     const { session } = start([review()]);
-    expect(session.current()!.unit.kind).toBe("lead-in");
-    expect(session.canMiss()).toBe(false);
-    expect(session.missed()).toBeNull();
+    for (const kind of ["announce", "lead-in"]) {
+      while (session.current()!.unit.kind !== kind) session.advance();
+      expect(session.canMiss()).toBe(false);
+      expect(session.missed()).toBeNull();
+    }
   });
 });
 
@@ -185,6 +197,46 @@ describe("DrillSession: growing cues", () => {
   });
 });
 
+describe("DrillSession: announcements", () => {
+  const said = (units: { kind: string; steps: { play: { kind: string } & Partial<{ text: string }> }[] }[]) =>
+    units.filter((u) => u.kind === "announce").map((u) => u.steps[0].play.text);
+
+  it("opens each block by saying what it is", () => {
+    expect(blockAnnouncement(review({ passageTitle: "Arriving in Tehran" }))).toBe("Review: Arriving in Tehran.");
+    expect(blockAnnouncement(review())).toBe("Review.");
+    expect(blockAnnouncement(learn({ passageTitle: "The prison" }))).toBe("New passage: The prison.");
+    expect(blockAnnouncement(learn({ passageTitle: "The prison", from: 2 }))).toBe("Continuing: The prison.");
+    expect(blockAnnouncement(learn({ from: 2 }))).toBe("Continuing the passage.");
+  });
+
+  it("announces the run-through and the shadowing, after the passage's own announcement", () => {
+    expect(said(blockUnits(learn(), opts))).toEqual(["New passage.", ANNOUNCE.wrapUp, ANNOUNCE.shadow]);
+    expect(said(blockUnits(review(), opts))).toEqual(["Review.", ANNOUNCE.shadow]);
+    // Nothing to run through without English: straight to the shadowing.
+    const unheard = phrases(2).map((p) => ({ ...p, english: undefined }));
+    expect(said(blockUnits(learn({ phrases: unheard, to: 2 }), opts))).toEqual(["New passage.", ANNOUNCE.shadow]);
+  });
+
+  it("shows an announcement's words on screen", () => {
+    const { session } = start([review({ passageTitle: "Arriving in Tehran" })]);
+    expect(session.current()!.step).toMatchObject({ cue: "announce", label: "Review: Arriving in Tehran" });
+  });
+
+  it("takes a Missed pressed during the shadowing announcement as late, for the last test", () => {
+    const { session } = start([review({ phrases: phrases(2), leadIn: undefined })]);
+    while (!(session.current()!.unit.kind === "announce" && session.current()!.unitIndex > 0)) session.advance();
+    const miss = session.missed();
+    expect(miss).toMatchObject({ late: true, jumped: true });
+    expect(miss!.phrases.map((p) => p.text)).toEqual(["p1"]);
+  });
+
+  it("lists the English a session speaks, with the announcements and its closing words", () => {
+    const texts = sessionEnglish([review({ phrases: phrases(2), passageTitle: "Arrival" })], opts);
+    expect(texts).toEqual(expect.arrayContaining(["Review: Arrival.", "e0", "e1", ANNOUNCE.shadow, ANNOUNCE.end]));
+    expect(sessionEnglish([], opts)).toEqual([]);
+  });
+});
+
 describe("DrillSession: late Missed presses", () => {
   /** Plays to the end, pressing Missed once where `at` says; returns what the press did and each unit as it started. */
   function playWithPress(session: DrillSession, at: (cur: Current) => boolean) {
@@ -210,7 +262,7 @@ describe("DrillSession: late Missed presses", () => {
     const { miss, units } = playWithPress(session, (cur) => cur.unit.kind === "test" && testOf(cur) === "1" && cur.step.cue === "english");
     expect(miss).toMatchObject({ late: true, jumped: true });
     expect(miss!.phrases.map((p) => p.text)).toEqual(["p0"]);
-    expect(units).toEqual(["test 0", "test 1", "fixup 0", "test 1", "test 2", "shadow"]);
+    expect(units).toEqual(["announce", "test 0", "test 1", "fixup 0", "test 1", "test 2", "announce", "shadow"]);
     // One miss in a three-phrase passage fails it.
     expect(events).toEqual([expect.objectContaining({ misses: 1, passed: false })]);
   });
@@ -221,7 +273,7 @@ describe("DrillSession: late Missed presses", () => {
     const { miss, units } = playWithPress(session, (cur) => cur.unit.kind === "learn" && cur.step.cue === "english" && cur.step.text === "p1");
     expect(miss).toMatchObject({ late: true, jumped: true });
     expect(miss!.phrases.map((p) => p.text)).toEqual(["p0"]);
-    expect(units.slice(0, 5)).toEqual(["learn", "test 0", "learn", "fixup 0", "learn"]);
+    expect(units.slice(0, 6)).toEqual(["announce", "learn", "test 0", "learn", "fixup 0", "learn"]);
   });
 
   it("doesn't take a late press during the whole-passage run-through", () => {
@@ -236,7 +288,7 @@ describe("DrillSession: late Missed presses", () => {
     const { miss, units } = playWithPress(session, (cur) => cur.unit.kind === "test" && testOf(cur) === "1" && cur.step.cue === "speak");
     expect(miss).toMatchObject({ late: false, jumped: true });
     expect(miss!.phrases.map((p) => p.text)).toEqual(["p1"]);
-    expect(units.slice(0, 3)).toEqual(["test 0", "test 1", "fixup 1"]);
+    expect(units.slice(0, 4)).toEqual(["announce", "test 0", "test 1", "fixup 1"]);
   });
 
   it("has nothing to be late for on the first test after a lead-in", () => {
@@ -258,7 +310,7 @@ describe("DrillSession: late Missed presses", () => {
       return cur.unit.kind === "test" && testOf(cur) === "1" && cur.step.cue === "english";
     });
     // The press during test 1's English was about the fix-up's retest, so phrase 0 gets another round.
-    expect(units.slice(0, 5)).toEqual(["test 0", "fixup 0", "test 1", "fixup 0", "test 1"]);
+    expect(units.slice(0, 6)).toEqual(["announce", "test 0", "fixup 0", "test 1", "fixup 0", "test 1"]);
     expect(events).toEqual([expect.objectContaining({ misses: 1, passed: true })]);
   });
 });
@@ -275,11 +327,12 @@ describe("DrillSession: learning", () => {
       session.advance();
     }
     expect(units).toEqual([
-      "lead-in",
+      ...["announce", "lead-in"],
       ...["learn", "test 0"],
       ...["learn", "test 1", "test 0+1"],
       ...["learn", "test 2", "test 1+2"],
-      ...["test 0", "test 1", "test 2", "shadow"],
+      ...["announce", "test 0", "test 1", "test 2"],
+      ...["announce", "shadow"],
     ]);
     expect(events.map((e) => (e.kind === "learning" ? `learning ${e.phrases}` : e.kind))).toEqual([
       "learning 1",
@@ -291,6 +344,7 @@ describe("DrillSession: learning", () => {
 
   it("starts with the full slowed repeats and the English", () => {
     const { session } = start([learn({ leadIn: undefined })]);
+    while (session.current()!.unit.kind === "announce") session.advance();
     const first = session.current()!;
     expect(first.step.cue).toBe("english");
     session.advance();
@@ -301,6 +355,7 @@ describe("DrillSession: learning", () => {
 
   it("resumes partway through a passage, led in by the last phrase learned", () => {
     const { session, events } = start([learn({ phrases: phrases(5), from: 3, to: 5, wrapUp: false })]);
+    while (session.current()!.unit.kind === "announce") session.advance();
     const cur = session.current()!;
     expect(cur.unit.kind).toBe("lead-in");
     expect(cur.step.text).toBe("p2");
