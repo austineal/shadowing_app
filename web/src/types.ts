@@ -191,8 +191,6 @@ export interface Drill {
   kind?: "cards";
   /** Cards: the deck's lessons in order; each passage's `lesson` indexes this. */
   lessons?: string[];
-  /** Cards: new cards come from lessons up to this index only (absent or null: all of them). */
-  lessonLimit?: number | null;
   /** When the excerpt was chosen (ms since epoch). */
   createdAt: number;
 }

@@ -2,7 +2,8 @@
  * Decks of audio flashcards. The client uploads each card's clips and a manifest; buildDeck joins
  * them into one constant-bitrate MP3 (each card, a pause, its English, a longer pause) and writes
  * the cards as the episode's segments, so the player, drills and offline copies treat a deck like
- * any other episode.
+ * any other episode. An uploaded deck is for drilling whole, so the build also adds it to the
+ * language's drills.
  */
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -62,11 +63,55 @@ function parseManifest(json: unknown): ManifestCard[] {
   });
 }
 
+/** The schedule a language gets when its first drill is added (as DEFAULT_SCHEDULE in the web app). */
+const DEFAULT_SCHEDULE = { perDay: 1, everyDays: 1, minutes: 20, newMaterial: true, learning: "full" };
+
+/**
+ * Adds the deck to the language's drills, unless it's there already (a rebuild): every card, to
+ * be learned lesson by lesson in the order the lessons first appear, shuffled within each.
+ * Matches createCardsDrill in the web app.
+ */
+async function addDrill(uid: string, episodeId: string, title: string, language: string, durationSec: number, segments: Record<string, unknown>[]) {
+  const drills = db.collection(`users/${uid}/drills`);
+  const existing = await drills.where("episodeId", "==", episodeId).get();
+  if (existing.docs.some((d) => d.get("kind") === "cards")) return;
+
+  const lessonOf = (s: Record<string, unknown>) => (typeof s.lesson === "string" ? s.lesson : undefined);
+  const lessons = [...new Set(segments.flatMap((s) => lessonOf(s) ?? []))];
+  const groups = lessons.length ? lessons.map(() => [] as Record<string, unknown>[]) : [[] as Record<string, unknown>[]];
+  for (const s of segments) groups[Math.max(0, lessons.indexOf(lessonOf(s) ?? ""))].push(s);
+  const passages = groups.flatMap((g, lesson) => {
+    for (let i = g.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [g[i], g[j]] = [g[j], g[i]];
+    }
+    return g.map((s) => ({ start: s.start, end: s.end, card: true, ...(lessons.length ? { lesson } : {}) }));
+  });
+
+  await drills.add({
+    kind: "cards",
+    episodeId,
+    episodeTitle: title,
+    title,
+    language,
+    start: 0,
+    end: durationSec,
+    passages,
+    lessons,
+    learning: null,
+    createdAt: Date.now(),
+  });
+  const prefs = db.doc(`users/${uid}/prefs/drill`);
+  const schedules = (await prefs.get()).get("schedules") as Record<string, unknown> | undefined;
+  if (!schedules?.[language]) await prefs.set({ schedules: { [language]: DEFAULT_SCHEDULE } }, { merge: true });
+}
+
 const silence = (sec: number) => Buffer.alloc(Math.round(sec * RATE) * 2);
 const seconds = (bytes: number) => bytes / 2 / RATE;
 
 async function build(uid: string, episodeId: string): Promise<void> {
   const ref = db.doc(`users/${uid}/episodes/${episodeId}`);
+  const episode = await ref.get();
   const folder = `users/${uid}/episodes/${episodeId}`;
   const [manifestBytes] = await bucket.file(`${folder}/deck.json`).download();
   const cards = parseManifest(JSON.parse(manifestBytes.toString("utf8")));
@@ -133,6 +178,10 @@ async function build(uid: string, episodeId: string): Promise<void> {
       cardCount: cards.length,
       updatedAt: FieldValue.serverTimestamp(),
     });
+    const language = episode.get("language");
+    if (typeof language === "string" && language !== "auto") {
+      await addDrill(uid, episodeId, episode.get("title") ?? "Deck", language, seconds(bytes), segments);
+    }
     logger.info("Built deck", { uid, episodeId, cards: cards.length, sec: Math.round(seconds(bytes)), mp3: mp3.length, ms: Date.now() - started });
     // The joined audio replaces the clips.
     await bucket.deleteFiles({ prefix: `${folder}/clips/` }).catch((e) => logger.warn("Removing clips failed", { err: String(e) }));

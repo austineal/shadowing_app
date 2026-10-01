@@ -67,16 +67,9 @@ const CARD_SHARE = 0.5;
 
 const isCards = (d: PlanDrill) => d.drill.kind === "cards";
 
-/** Whether a deck's card is in a lesson it may learn from yet (see Drill.lessonLimit). */
-const unlocked = (drill: Drill, i: number) => drill.lessonLimit == null || (drill.passages[i].lesson ?? 0) <= drill.lessonLimit;
-
-/**
- * Index of the first passage not yet learned, or -1 when the excerpt is fully learned (or, for a
- * deck, when the next card is past the lessons it may learn from).
- */
+/** Index of the first passage not yet learned, or -1 when the excerpt is fully learned. */
 export function frontier(drill: Drill): number {
-  const i = drill.passages.findIndex((p) => !isLearned(p));
-  return i >= 0 && !unlocked(drill, i) ? -1 : i;
+  return drill.passages.findIndex((p) => !isLearned(p));
 }
 
 function shuffled<T>(xs: T[], random: () => number): T[] {
@@ -322,7 +315,7 @@ function planCardLearning(
   from?: number,
 ): { used: number; next?: number; heldBack?: LoadDay } {
   const ps = d.drill.passages;
-  const learnable = (j: number) => j < ps.length && !isLearned(ps[j]) && unlocked(d.drill, j) && passagePhrases(d, j).length > 0;
+  const learnable = (j: number) => j < ps.length && !isLearned(ps[j]) && passagePhrases(d, j).length > 0;
   let used = 0;
   let heldBack: LoadDay | undefined;
   let i = from ?? frontier(d.drill);
