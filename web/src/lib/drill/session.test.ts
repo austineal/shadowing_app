@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DrillSession, type Current, type LearnBlock, type ReviewBlock, type SessionEvent } from "./session";
+import { DrillSession, type Current, type LearnBlock, type Miss, type ReviewBlock, type SessionEvent } from "./session";
 import { drillOptions, type SessionPhrase } from "./steps";
 
 const opts = drillOptions("full", { paddingMs: 120, gapFactor: 1.3, slowRate: 0.75 });
@@ -44,7 +44,7 @@ function run(session: DrillSession, miss: (cur: Current) => boolean = () => fals
   const log: string[] = [];
   for (let guard = 0; !session.finished && guard < 5000; guard++) {
     const cur = session.current()!;
-    if (miss(cur) && session.missed()) continue; // jumped to the answer
+    if (miss(cur) && session.missed()?.jumped) continue; // jumped to the answer or a fix-up
     log.push(`${cur.unit.kind}:${cur.step.cue}`);
     session.advance();
   }
@@ -122,7 +122,85 @@ describe("DrillSession: review", () => {
     const { session } = start([review()]);
     expect(session.current()!.unit.kind).toBe("lead-in");
     expect(session.canMiss()).toBe(false);
-    expect(session.missed()).toBe(false);
+    expect(session.missed()).toBeNull();
+  });
+});
+
+describe("DrillSession: late Missed presses", () => {
+  /** Plays to the end, pressing Missed once where `at` says; returns what the press did and each unit as it started. */
+  function playWithPress(session: DrillSession, at: (cur: Current) => boolean) {
+    const units: string[] = [];
+    let last: Current["unit"] | undefined;
+    let miss: Miss | null | undefined;
+    for (let guard = 0; !session.finished && guard < 5000; guard++) {
+      const cur = session.current()!;
+      if (cur.unit !== last) units.push(`${cur.unit.kind} ${cur.unit.test?.phrases.join("+") ?? ""}`.trim());
+      last = cur.unit;
+      if (miss === undefined && at(cur)) {
+        miss = session.missed();
+        if (miss?.jumped) continue;
+      }
+      session.advance();
+    }
+    return { miss, units };
+  }
+  const testOf = (cur: Current) => cur.unit.test?.phrases.join();
+
+  it("gives the phrase just answered its fix-up when pressed during the next English", () => {
+    const { session, events } = start([review({ leadIn: undefined, phrases: phrases(3) })]);
+    const { miss, units } = playWithPress(session, (cur) => cur.unit.kind === "test" && testOf(cur) === "1" && cur.step.cue === "english");
+    expect(miss).toMatchObject({ late: true, jumped: true });
+    expect(miss!.phrases.map((p) => p.text)).toEqual(["p0"]);
+    expect(units).toEqual(["test 0", "test 1", "fixup 0", "test 1", "test 2", "shadow"]);
+    // One miss in a three-phrase passage fails it.
+    expect(events).toEqual([expect.objectContaining({ misses: 1, passed: false })]);
+  });
+
+  it("takes a late press at the start of the next phrase's learning, when learning", () => {
+    const { session } = start([learn({ leadIn: undefined, phrases: phrases(3) })]);
+    // After phrase 0's first try, its learning is followed by phrase 1's learning, not a test.
+    const { miss, units } = playWithPress(session, (cur) => cur.unit.kind === "learn" && cur.step.cue === "english" && cur.step.text === "p1");
+    expect(miss).toMatchObject({ late: true, jumped: true });
+    expect(miss!.phrases.map((p) => p.text)).toEqual(["p0"]);
+    expect(units.slice(0, 5)).toEqual(["learn", "test 0", "learn", "fixup 0", "learn"]);
+  });
+
+  it("doesn't take a late press during the whole-passage run-through", () => {
+    const { session } = start([review({ leadIn: undefined, phrases: phrases(2) })]);
+    while (session.current()!.unit.kind !== "shadow") session.advance();
+    expect(session.canMiss()).toBe(false);
+    expect(session.missed()).toBeNull();
+  });
+
+  it("counts a press during the speaking pause for the phrase being tested", () => {
+    const { session } = start([review({ leadIn: undefined })]);
+    const { miss, units } = playWithPress(session, (cur) => cur.unit.kind === "test" && testOf(cur) === "1" && cur.step.cue === "speak");
+    expect(miss).toMatchObject({ late: false, jumped: true });
+    expect(miss!.phrases.map((p) => p.text)).toEqual(["p1"]);
+    expect(units.slice(0, 3)).toEqual(["test 0", "test 1", "fixup 1"]);
+  });
+
+  it("has nothing to be late for on the first test after a lead-in", () => {
+    const { session } = start([review()]);
+    const { miss } = playWithPress(session, (cur) => cur.unit.kind === "test" && cur.step.cue === "english");
+    expect(miss).toMatchObject({ late: false, jumped: true });
+    expect(miss!.phrases.map((p) => p.text)).toEqual(["p0"]);
+  });
+
+  it("counts a late press after a fix-up's retest for that retest, still once for the passage", () => {
+    const { session, events } = start([review({ leadIn: undefined })]);
+    let missedFirst = false;
+    const { units } = playWithPress(session, (cur) => {
+      if (!missedFirst && cur.unit.kind === "test" && testOf(cur) === "0" && cur.step.cue === "speak") {
+        missedFirst = true;
+        session.missed(); // missed in time: jumps to the answer, and the fix-up follows
+        return false;
+      }
+      return cur.unit.kind === "test" && testOf(cur) === "1" && cur.step.cue === "english";
+    });
+    // The press during test 1's English was about the fix-up's retest, so phrase 0 gets another round.
+    expect(units.slice(0, 5)).toEqual(["test 0", "fixup 0", "test 1", "fixup 0", "test 1"]);
+    expect(events).toEqual([expect.objectContaining({ misses: 1, passed: true })]);
   });
 });
 

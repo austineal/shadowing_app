@@ -57,6 +57,8 @@ export interface Unit {
   steps: Step[];
   /** Tests: the phrases tested (indices into the block's phrases), whether the result counts, and which retry this is. */
   test?: { phrases: number[]; graded: boolean; attempt: number };
+  /** Tests: marked missed, so a fix-up follows. */
+  missed?: boolean;
   /** Learning: how many of the passage's phrases are learned once this unit is done. */
   learned?: number;
 }
@@ -73,9 +75,9 @@ const MISS_RATE = { review: 0.1, learn: 0.15 };
 
 const levelOf = (block: Block) => (block.kind === "review" ? block.level : -1);
 
-function testUnit(block: Block, idx: number[], graded: boolean): Unit {
+function testUnit(block: Block, idx: number[], graded: boolean, opts: DrillOptions): Unit {
   const ps = idx.map((i) => block.phrases[i]);
-  return { kind: "test", steps: testSteps(block.episodeId, ps, levelOf(block)), test: { phrases: idx, graded, attempt: 0 } };
+  return { kind: "test", steps: testSteps(block.episodeId, ps, levelOf(block), opts), test: { phrases: idx, graded, attempt: 0 } };
 }
 
 /** After a miss: listen and repeat again, then retry the test (ungraded). */
@@ -84,7 +86,7 @@ function fixupUnit(block: Block, missed: Unit, opts: DrillOptions): Unit {
   const ps = idx.map((i) => block.phrases[i]);
   return {
     kind: "fixup",
-    steps: [...repeatSteps(block.episodeId, ps, opts), ...testSteps(block.episodeId, ps, levelOf(block))],
+    steps: [...repeatSteps(block.episodeId, ps, opts), ...testSteps(block.episodeId, ps, levelOf(block), opts)],
     test: { phrases: idx, graded: false, attempt: missed.test!.attempt + 1 },
   };
 }
@@ -98,17 +100,17 @@ function leadInUnit(block: Block): Unit | undefined {
 export function learnGroupUnits(block: LearnBlock, k: number, opts: DrillOptions): Unit[] {
   const p = block.phrases[k];
   const units: Unit[] = [{ kind: "learn", steps: learnSteps(block.episodeId, p, opts) }];
-  if (p.english) units.push(testUnit(block, [k], false));
-  if (k > 0 && hasEnglish([block.phrases[k - 1], p])) units.push(testUnit(block, [k - 1, k], false));
+  if (p.english) units.push(testUnit(block, [k], false, opts));
+  if (k > 0 && hasEnglish([block.phrases[k - 1], p])) units.push(testUnit(block, [k - 1, k], false, opts));
   units[units.length - 1].learned = k + 1;
   return units;
 }
 
 /** Finishing a passage: every phrase from its English, in order, then the whole passage to shadow. */
-export function wrapUpUnits(block: LearnBlock): Unit[] {
+export function wrapUpUnits(block: LearnBlock, opts: DrillOptions): Unit[] {
   const units: Unit[] = [];
   block.phrases.forEach((p, i) => {
-    if (p.english) units.push(testUnit(block, [i], false));
+    if (p.english) units.push(testUnit(block, [i], false, opts));
   });
   units.push({ kind: "shadow", steps: shadowSteps(block.episodeId, block.phrases) });
   return units;
@@ -121,13 +123,13 @@ export function blockUnits(block: Block, opts: DrillOptions): Unit[] {
   if (block.kind === "review") {
     block.phrases.forEach((p, i) => {
       // A phrase without English can't be tested, so it's just heard and repeated.
-      units.push(p.english ? testUnit(block, [i], true) : { kind: "listen", steps: repeatSteps(block.episodeId, [p], opts, 1) });
+      units.push(p.english ? testUnit(block, [i], true, opts) : { kind: "listen", steps: repeatSteps(block.episodeId, [p], opts, 1) });
     });
     units.push({ kind: "shadow", steps: shadowSteps(block.episodeId, block.phrases) });
     return units;
   }
   for (let k = block.from; k < block.to; k++) units.push(...learnGroupUnits(block, k, opts));
-  if (block.wrapUp) units.push(...wrapUpUnits(block));
+  if (block.wrapUp) units.push(...wrapUpUnits(block, opts));
   return units;
 }
 
@@ -143,10 +145,20 @@ export function unitsSeconds(block: Block, units: Unit[], opts: DrillOptions): n
 export const blockSeconds = (block: Block, opts: DrillOptions) => unitsSeconds(block, blockUnits(block, opts), opts);
 export const learnGroupSeconds = (block: LearnBlock, k: number, opts: DrillOptions) =>
   unitsSeconds(block, learnGroupUnits(block, k, opts), opts);
-export const wrapUpSeconds = (block: LearnBlock, opts: DrillOptions) => unitsSeconds(block, wrapUpUnits(block), opts);
+export const wrapUpSeconds = (block: LearnBlock, opts: DrillOptions) => unitsSeconds(block, wrapUpUnits(block, opts), opts);
 export function leadInSeconds(block: Block, opts: DrillOptions): number {
   const u = leadInUnit(block);
   return u ? stepsSeconds(u.steps, opts) : 0;
+}
+
+/** What a Missed press did. */
+export interface Miss {
+  /** The phrases marked missed. */
+  phrases: SessionPhrase[];
+  /** Whether the current step changed, so the player should start the new current step. */
+  jumped: boolean;
+  /** Whether it counted for the phrase just answered, pressed while the next English played. */
+  late: boolean;
 }
 
 export interface Current {
@@ -167,8 +179,6 @@ export class DrillSession {
   private units: Unit[] = [];
   private unitIndex = 0;
   private stepIndex = 0;
-  /** Whether the current unit's test has been marked missed. */
-  private unitMissed = false;
   /** Graded phrases missed in the current block (each counts once). */
   private misses = new Set<number>();
 
@@ -204,30 +214,67 @@ export class DrillSession {
     this.finishUnit(unit);
   }
 
-  /** Whether Missed means anything now: during a test, from its English cue to just after the answer. */
+  /**
+   * Whether Missed means anything now: during a test, from its English cue to just after the
+   * answer, or while English plays straight after a test (see missed).
+   */
   canMiss(): boolean {
     const cur = this.current();
-    return !!cur?.unit.test && (cur.step.cue === "english" || cur.step.cue === "speak" || cur.step.cue === "answer");
+    if (!cur) return false;
+    if (this.lateTarget()) return true;
+    return !!cur.unit.test && (cur.step.cue === "english" || cur.step.cue === "speak" || cur.step.cue === "answer");
   }
 
   /**
-   * Marks the current test missed. Before the answer this skips straight to it and returns true,
-   * meaning the player should start the (new) current step; otherwise it just records the miss.
+   * The test just answered, when a press now would be a late one for it: while the English that
+   * opens the next unit plays, whether that's the next test's cue (the learner hasn't been asked
+   * to say it yet) or the next phrase's meaning when learning.
    */
-  missed(): boolean {
-    if (!this.canMiss()) return false;
+  private lateTarget(): Unit | undefined {
     const unit = this.units[this.unitIndex];
-    this.unitMissed = true;
-    if (unit.test!.graded) for (const i of unit.test!.phrases) this.misses.add(i);
+    const prev = this.units[this.unitIndex - 1];
+    if (!unit || !prev?.test || prev.missed) return undefined;
+    return unit.steps.slice(0, this.stepIndex + 1).every((s) => s.cue === "english") ? prev : undefined;
+  }
+
+  /**
+   * Marks a test missed, or returns null if Missed means nothing now. Pressed during the current
+   * test's speaking pause (or its English, if nothing was just answered), it marks this test and
+   * skips straight to the answer. Pressed just after a test instead (see lateTarget), it's a late
+   * press for that test: it gets its fix-up now, and whatever was playing starts again after it.
+   */
+  missed(): Miss | null {
+    if (!this.canMiss()) return null;
+    const block = this.blocks[this.blockIndex];
+    const unit = this.units[this.unitIndex];
+    const phrasesOf = (u: Unit) => u.test!.phrases.map((i) => block.phrases[i]);
+
+    const prev = this.lateTarget();
+    if (prev) {
+      this.mark(prev);
+      if (prev.test!.attempt < MAX_FIXUPS) {
+        this.units.splice(this.unitIndex, 0, fixupUnit(block, prev, this.opts));
+        this.stepIndex = 0;
+        return { phrases: phrasesOf(prev), jumped: true, late: true };
+      }
+      return { phrases: phrasesOf(prev), jumped: false, late: true };
+    }
+
+    this.mark(unit);
     const cue = unit.steps[this.stepIndex].cue;
     if (cue === "english" || cue === "speak") {
       const answer = unit.steps.findIndex((s, i) => i > this.stepIndex && s.cue === "answer");
       if (answer >= 0) {
         this.stepIndex = answer;
-        return true;
+        return { phrases: phrasesOf(unit), jumped: true, late: false };
       }
     }
-    return false;
+    return { phrases: phrasesOf(unit), jumped: false, late: false };
+  }
+
+  private mark(unit: Unit) {
+    unit.missed = true;
+    if (unit.test!.graded) for (const i of unit.test!.phrases) this.misses.add(i);
   }
 
   private enterBlock(i: number) {
@@ -235,17 +282,15 @@ export class DrillSession {
     this.units = i < this.blocks.length ? blockUnits(this.blocks[i], this.opts) : [];
     this.unitIndex = 0;
     this.stepIndex = 0;
-    this.unitMissed = false;
     this.misses = new Set();
     if (i < this.blocks.length && this.units.length === 0) this.enterBlock(i + 1);
   }
 
   private finishUnit(unit: Unit) {
     const block = this.blocks[this.blockIndex];
-    if (unit.test && this.unitMissed && unit.test.attempt < MAX_FIXUPS) {
+    if (unit.test && unit.missed && unit.test.attempt < MAX_FIXUPS) {
       this.units.splice(this.unitIndex + 1, 0, fixupUnit(block, unit, this.opts));
     }
-    this.unitMissed = false;
     if (unit.learned !== undefined && block.kind === "learn") this.onEvent({ kind: "learning", block, phrases: unit.learned });
     this.unitIndex++;
     this.stepIndex = 0;

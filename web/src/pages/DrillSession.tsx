@@ -308,6 +308,13 @@ function SessionView({ uid, language, prepared }: { uid: string; language: strin
       ) : started && cur ? (
         <>
           <div className="drill-stage">
+            {player.action && (
+              <div key={player.action.id} className={`drill-toast ${player.action.kind}`} role="status">
+                {player.action.kind === "missed"
+                  ? `✗ Missed${player.action.late ? " (the one before)" : ""}: ${player.action.text}`
+                  : "Skipped ›"}
+              </div>
+            )}
             <div className="drill-block small muted">
               {cur.block.kind === "review" ? "Review" : "Learning"} · {cur.block.title} · passage {cur.block.passage + 1} of{" "}
               {cur.block.passageCount}
