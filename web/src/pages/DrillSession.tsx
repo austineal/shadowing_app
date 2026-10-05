@@ -14,9 +14,10 @@ import { DrillSession, type Block, type LearnBlock, type SessionEvent } from "..
 import { learnedPassage, reviewedPassage } from "../lib/drill/srs";
 import { cueSize, type DrillOptions, type SessionPhrase, type Step } from "../lib/drill/steps";
 import { scheduleLabel } from "../lib/drill/schedules";
-import { prepareDrillStudy, saveDrillProgress, startSessionLog, updateSessionLog } from "../lib/drill/store";
+import { saveDrillProgress, startSessionLog, updateSessionLog } from "../lib/drill/store";
 import { formatTime } from "../lib/format";
 import { languageLabel } from "../lib/languages";
+import { prepareStudy } from "../lib/study";
 import { isVoiceStored, loadVoice } from "../lib/tts/client";
 import type { Drill, DrillSchedule, DrillSessionLog } from "../types";
 
@@ -288,9 +289,8 @@ function SessionView(props: { uid: string; prepared: Prepared; onLearnAnyway: ()
     setNote("Requesting translations…");
     try {
       const ids = new Set(plan.blocks.map((b) => b.drillId));
-      for (const d of prepared.drills.filter((x) => ids.has(x.id))) {
-        await prepareDrillStudy({ episodeId: d.episodeId, language, start: d.start, end: d.end });
-      }
+      const episodeIds = new Set(prepared.drills.filter((x) => ids.has(x.id)).map((d) => d.episodeId));
+      for (const id of episodeIds) await prepareStudy(id, language, true);
       setNote("Requested. Translations take a minute or two; open the session again after that.");
     } catch (e) {
       setNote(message(e));

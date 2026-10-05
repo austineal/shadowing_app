@@ -15,6 +15,7 @@ import * as logger from "firebase-functions/logger";
 import { db, bucket } from "./admin.js";
 import { REGION } from "./config.js";
 import { assertAllowed } from "./auth.js";
+import { startDeckStudy } from "./study.js";
 import { RATE, decode, encode } from "./deckAudio.js";
 
 
@@ -170,7 +171,8 @@ async function build(uid: string, episodeId: string): Promise<void> {
       updatedAt: FieldValue.serverTimestamp(),
     });
     const language = episode.get("language");
-    if (typeof language === "string" && language !== "auto") {
+    // Drills need study mode, which needs the learner's level for the language.
+    if (typeof language === "string" && language !== "auto" && (await startDeckStudy(uid, episodeId, language))) {
       await addDrill(uid, episodeId, episode.get("title") ?? "Deck", language, seconds(bytes), segments);
     }
     logger.info("Built deck", { uid, episodeId, cards: cards.length, sec: Math.round(seconds(bytes)), mp3: mp3.length, ms: Date.now() - started });

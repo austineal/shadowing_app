@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useDrillPrefs, useNow, useRecentSessions } from "../hooks/useDrills";
 import { DEFAULT_SCHEDULE, formatMinutes } from "../lib/drill/labels";
 import { formatLearningTime, weeklyPace } from "../lib/drill/pace";
@@ -6,12 +6,11 @@ import { phrasesIn, splitPassages } from "../lib/drill/passages";
 import { learningSeconds } from "../lib/drill/plan";
 import { logScheduleKey, scheduleForEpisode, scheduleLabel, schedulesOf } from "../lib/drill/schedules";
 import { drillOptions } from "../lib/drill/steps";
-import { createDrill, planDrillPassages, prepareDrillStudy, setSchedule } from "../lib/drill/store";
+import { createDrill, planDrillPassages, setSchedule } from "../lib/drill/store";
 import { formatTime } from "../lib/format";
 import { languageLabel } from "../lib/languages";
 import { loadDefaultSettings } from "../lib/settings";
-import { setStudyLevel, subscribeStudyLevels } from "../lib/study";
-import { CEFR_LEVELS, type CefrLevel, type Drill, type Episode, type Segment } from "../types";
+import type { Drill, Episode, Segment } from "../types";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -39,8 +38,6 @@ export function ExcerptPicker(props: {
   const prefs = useDrillPrefs(uid);
   const sessions = useRecentSessions(uid);
   const now = useNow();
-  const [levels, setLevels] = useState<Record<string, CefrLevel>>({});
-  useEffect(() => subscribeStudyLevels(uid, setLevels), [uid]);
   const [chosenKey, setChosenKey] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string>();
@@ -98,7 +95,6 @@ export function ExcerptPicker(props: {
   // Not while adding: the new excerpt reaches the live list (from the local cache) before the write
   // returns, and would count as overlapping itself.
   const overlap = busy ? undefined : props.existing.find((d) => d.start < end && start < d.end);
-  const level = levels[language];
 
   const add = async () => {
     setBusy(true);
@@ -121,14 +117,6 @@ export function ExcerptPicker(props: {
       if (!schedule) {
         await setSchedule(uid, key, DEFAULT_SCHEDULE);
         msg += ` ${languageLabel(language)} drills are now scheduled every day for 20 minutes; change that under Drill schedules in the library.`;
-      }
-      try {
-        const { missing } = await prepareDrillStudy({ episodeId: episode.id, language, start, end });
-        msg += missing
-          ? " Its translations are being prepared too, which takes a minute or two."
-          : " Its translations are already there.";
-      } catch (e) {
-        msg += ` The translations couldn't be requested (${message(e)}); a drill session will offer to try again.`;
       }
       setDone(msg);
     } catch (e) {
@@ -173,27 +161,9 @@ export function ExcerptPicker(props: {
           This overlaps an excerpt you're already drilling ({formatTime(overlap.start)}–{formatTime(overlap.end)}).
         </p>
       )}
-      {!level && (
-        <label className="row small">
-          Your level in {languageLabel(language)}, for the translations and notes:
-          <select
-            className="input"
-            style={{ width: "auto", padding: "4px 8px", minHeight: 32 }}
-            value=""
-            onChange={(e) => void setStudyLevel(uid, language, e.target.value as CefrLevel)}
-          >
-            <option value="">Not set</option>
-            {CEFR_LEVELS.map((l) => (
-              <option key={l} value={l}>
-                {l}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
       {error && <p className="small error">{error}</p>}
       <div className="row">
-        <button className="btn primary small" disabled={busy || !!overlap || !level || !prefs} onClick={() => void add()}>
+        <button className="btn primary small" disabled={busy || !!overlap || !prefs} onClick={() => void add()}>
           {busy ? "Adding…" : "Drill this excerpt"}
         </button>
         {close}

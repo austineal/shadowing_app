@@ -1,6 +1,6 @@
 /**
  * Drill callables that use Claude: suggesting excerpts of an episode, and splitting a chosen
- * excerpt into titled passages. (Translations for an excerpt are prepareDrillStudy in study.ts.)
+ * excerpt into titled passages. (A drill's translations come from study mode; see study.ts.)
  */
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { FieldValue } from "firebase-admin/firestore";

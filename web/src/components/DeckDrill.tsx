@@ -34,7 +34,8 @@ function SchedulePicker(props: { keys: string[]; value: string; label: (k: strin
 
 /**
  * A deck's drill: its progress and the schedule it's on. A deck joins its language's main
- * schedule when it's built, so starting one here is only needed after it's been removed.
+ * schedule when it's built (if study mode could be turned on then), so starting one here is only
+ * needed otherwise or after it's been removed.
  */
 export function DeckDrill(props: {
   uid: string;
