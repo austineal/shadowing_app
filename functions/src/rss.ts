@@ -14,6 +14,7 @@ const USER_AGENT = "shadowing-app/0.1 (+https://github.com/austin/shadowing_app)
 interface FeedEpisode {
   title: string;
   audioUrl: string;
+  guid?: string;
   mimeType?: string;
   pubDate?: string;
   durationSec?: number;
@@ -94,6 +95,7 @@ export const fetchFeed = onCall(
       episodes.push({
         title: text(item.title) ?? "Untitled",
         audioUrl,
+        guid: text(item.guid)?.trim() || undefined,
         mimeType: enclosure["@_type"],
         pubDate: text(item.pubDate),
         durationSec: parseDuration(item["itunes:duration"]),
@@ -137,9 +139,36 @@ function pickExtension(contentType: string | null, url: URL): string {
   return "mp3";
 }
 
+/** A feed URL without its query string or fragment, which tracking services rotate between fetches. */
+function audioKey(url: string): string {
+  return url.replace(/[?#].*$/, "");
+}
+
+/**
+ * The user's existing copy of a feed episode, if any. Mirrors importedLookup in the web app:
+ * guid, then audio URL (with or without its query), then title within the same feed.
+ */
+async function findImported(
+  uid: string,
+  ep: { audioUrl: string; title: string; guid?: string; feedUrl?: string },
+): Promise<string | undefined> {
+  const episodes = db.collection(`users/${uid}/episodes`);
+  const exact = await episodes.where("sourceUrl", "==", ep.audioUrl).limit(1).get();
+  if (!exact.empty) return exact.docs[0].id;
+  if (!ep.feedUrl) return undefined;
+  const sameFeed = (await episodes.where("feedUrl", "==", ep.feedUrl).get()).docs;
+  const key = audioKey(ep.audioUrl);
+  const match =
+    (ep.guid ? sameFeed.find((d) => d.get("guid") === ep.guid) : undefined) ??
+    sameFeed.find((d) => typeof d.get("sourceUrl") === "string" && audioKey(d.get("sourceUrl")) === key) ??
+    sameFeed.find((d) => String(d.get("title") ?? "").trim() === ep.title);
+  return match?.id;
+}
+
 /**
  * Downloads a podcast episode into Storage. The Storage trigger then transcribes it.
- * Returns the new episode id immediately after the download completes.
+ * Returns the new episode id immediately after the download completes, or the existing one
+ * if this episode is already in the library.
  */
 export const importEpisode = onCall(
   { region: REGION, memory: "1GiB", timeoutSeconds: 540 },
@@ -152,6 +181,13 @@ export const importEpisode = onCall(
     const feedTitle = typeof data.feedTitle === "string" ? data.feedTitle.slice(0, 300) : undefined;
     const feedUrl = typeof data.feedUrl === "string" ? data.feedUrl.slice(0, 2000) : undefined;
     const folderId = typeof data.folderId === "string" && /^[A-Za-z0-9]{1,64}$/.test(data.folderId) ? data.folderId : null;
+    const guid = typeof data.guid === "string" && data.guid.trim() ? data.guid.trim().slice(0, 1000) : undefined;
+
+    const existing = await findImported(uid, { audioUrl: audioUrl.toString(), title, guid, feedUrl });
+    if (existing) {
+      logger.info("Episode already imported", { episodeId: existing, audioUrl: audioUrl.toString() });
+      return { episodeId: existing, existing: true };
+    }
 
     const res = await fetch(audioUrl, { headers: { "user-agent": USER_AGENT }, redirect: "follow" });
     if (!res.ok || !res.body) throw new HttpsError("unavailable", `Audio URL returned HTTP ${res.status}.`);
@@ -171,6 +207,7 @@ export const importEpisode = onCall(
       status: "uploading",
       source: "rss",
       sourceUrl: audioUrl.toString(),
+      guid: guid ?? null,
       feedTitle: feedTitle ?? null,
       feedUrl: feedUrl ?? null,
       folderId,

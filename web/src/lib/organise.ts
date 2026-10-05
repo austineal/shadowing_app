@@ -6,6 +6,40 @@ export function showKey(ep: Pick<Episode, "feedUrl" | "feedTitle">): string | un
   return ep.feedUrl || ep.feedTitle || undefined;
 }
 
+/** A feed URL without its query string or fragment, which tracking services rotate between fetches. */
+function audioKey(url: string): string {
+  return url.replace(/[?#].*$/, "");
+}
+
+/**
+ * Finds the library copy of each feed episode, so it is offered as "Open" rather than imported again.
+ * Matches on the feed's guid, then the audio URL (with or without its query), then, within the same
+ * feed, the title — enclosure URLs change when a show switches host or tracking prefix.
+ */
+export function importedLookup<E extends Pick<Episode, "sourceUrl" | "feedUrl" | "guid" | "title">>(
+  episodes: E[],
+  feedUrl: string | undefined,
+): (fe: { audioUrl: string; title: string; guid?: string }) => E | undefined {
+  const byUrl = new Map<string, E>();
+  const byGuid = new Map<string, E>();
+  const byTitle = new Map<string, E>();
+  for (const ep of episodes) {
+    if (ep.sourceUrl) {
+      byUrl.set(ep.sourceUrl, ep);
+      if (!byUrl.has(audioKey(ep.sourceUrl))) byUrl.set(audioKey(ep.sourceUrl), ep);
+    }
+    if (feedUrl && ep.feedUrl === feedUrl) {
+      if (ep.guid) byGuid.set(ep.guid, ep);
+      byTitle.set(ep.title.trim(), ep);
+    }
+  }
+  return (fe) =>
+    (fe.guid ? byGuid.get(fe.guid) : undefined) ??
+    byUrl.get(fe.audioUrl) ??
+    byUrl.get(audioKey(fe.audioUrl)) ??
+    byTitle.get(fe.title.trim());
+}
+
 /** The language an episode is filed under: the one chosen at import, or the detected one for auto-detect. */
 export function episodeLanguage(ep: Pick<Episode, "language" | "detectedLanguage">): string {
   const code = ep.language === "auto" ? ep.detectedLanguage : ep.language;

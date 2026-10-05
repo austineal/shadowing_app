@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildLibraryTree, episodeLanguage, feedStats, pubTime, searchEpisodes, type LibraryNode } from "./organise";
+import { buildLibraryTree, episodeLanguage, feedStats, importedLookup, pubTime, searchEpisodes, type LibraryNode } from "./organise";
 import type { Episode, Folder } from "../types";
 
 function ep(id: string, extra: Partial<Episode> = {}): Episode {
@@ -98,5 +98,33 @@ describe("feedStats", () => {
   it("counts nothing as new once seen up to the latest", () => {
     const { latestAt } = feedStats(feed, 0);
     expect(feedStats(feed, latestAt).newCount).toBe(0);
+  });
+});
+
+describe("importedLookup", () => {
+  const feed = "https://x/feed";
+  const library = [
+    ep("guid", { ...radioX, title: "Épisode 1", guid: "g1", sourceUrl: "https://cdn/1.mp3?t=old" }),
+    ep("url", { ...radioX, title: "Épisode 2", sourceUrl: "https://cdn/2.mp3?t=old" }),
+    ep("title", { ...radioX, title: "Épisode 3", sourceUrl: "https://old-host/3.mp3" }),
+    ep("elsewhere", { source: "rss", feedUrl: "https://y/feed", title: "Épisode 4", sourceUrl: "https://cdn/4.mp3" }),
+  ];
+  const find = importedLookup(library, feed);
+
+  it("matches on guid even when the audio URL moved", () => {
+    expect(find({ guid: "g1", title: "Renamed", audioUrl: "https://new/1.mp3" })?.id).toBe("guid");
+  });
+  it("matches the audio URL ignoring rotated query strings", () => {
+    expect(find({ title: "Other", audioUrl: "https://cdn/2.mp3?t=new" })?.id).toBe("url");
+  });
+  it("matches on title within the same feed", () => {
+    expect(find({ title: " Épisode 3 ", audioUrl: "https://new-host/3.mp3" })?.id).toBe("title");
+  });
+  it("matches the exact URL from another feed but not its title", () => {
+    expect(find({ title: "x", audioUrl: "https://cdn/4.mp3" })?.id).toBe("elsewhere");
+    expect(find({ title: "Épisode 4", audioUrl: "https://new/4.mp3" })).toBeUndefined();
+  });
+  it("leaves new episodes importable", () => {
+    expect(find({ guid: "g9", title: "Épisode 9", audioUrl: "https://cdn/9.mp3" })).toBeUndefined();
   });
 });

@@ -14,6 +14,8 @@ export interface Episode {
   kind?: "deck";
   cardCount?: number;
   sourceUrl?: string | null;
+  /** The feed item's <guid>, for recognising the episode after its audio URL changes. */
+  guid?: string | null;
   feedTitle?: string | null;
   /** RSS feed the episode was imported from; groups episodes by show in the library. */
   feedUrl?: string | null;

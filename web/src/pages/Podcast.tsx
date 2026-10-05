@@ -5,12 +5,11 @@ import { ShowMore } from "../components/ShowMore";
 import { usePaged } from "../hooks/usePaged";
 import { useEpisodes } from "../hooks/useEpisode";
 import { useSubscriptions } from "../hooks/useLibrary";
-import { fetchFeed, importFeedEpisode, type FeedResult } from "../lib/episodes";
+import { fetchFeed, importFeedEpisode, type FeedEpisode, type FeedResult } from "../lib/episodes";
 import { recordFeedCheck, setSubscriptionLanguage, unsubscribe } from "../lib/library";
-import { pubTime, showKey } from "../lib/organise";
+import { importedLookup, pubTime, showKey } from "../lib/organise";
 import { formatDuration } from "../lib/format";
 import { useOnline } from "../lib/offline";
-import type { Episode } from "../types";
 
 /** One subscribed show: its feed, with new and already-imported episodes marked. */
 export default function Podcast({ uid }: { uid: string }) {
@@ -47,11 +46,7 @@ export default function Podcast({ uid }: { uid: string }) {
 
   const paged = usePaged(`feed:${id}`, feed?.episodes ?? []);
 
-  const bySourceUrl = useMemo(() => {
-    const m = new Map<string, Episode>();
-    for (const ep of episodes ?? []) if (ep.sourceUrl) m.set(ep.sourceUrl, ep);
-    return m;
-  }, [episodes]);
+  const findImported = useMemo(() => importedLookup(episodes ?? [], sub?.feedUrl), [episodes, sub?.feedUrl]);
 
   if (subsError) return <Shell title="Error"><p className="error section">{subsError}</p></Shell>;
   if (subscriptions === undefined) {
@@ -71,11 +66,11 @@ export default function Podcast({ uid }: { uid: string }) {
     );
   }
 
-  const doImport = async (audioUrl: string, title: string) => {
+  const doImport = async ({ audioUrl, title, guid }: FeedEpisode) => {
     setImporting((s) => new Set(s).add(audioUrl));
     setError(undefined);
     try {
-      await importFeedEpisode({ audioUrl, title, language: sub.language, feedTitle: sub.title, feedUrl: sub.feedUrl });
+      await importFeedEpisode({ audioUrl, title, guid, language: sub.language, feedTitle: sub.title, feedUrl: sub.feedUrl });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -141,7 +136,7 @@ export default function Podcast({ uid }: { uid: string }) {
       {feed && (
         <div className="list">
           {paged.shown.map((fe) => {
-            const imported = bySourceUrl.get(fe.audioUrl);
+            const imported = findImported(fe);
             const isNew = pubTime(fe.pubDate) > loaded!.seenUpTo;
             return (
               <div key={fe.audioUrl} className="card">
@@ -161,8 +156,8 @@ export default function Podcast({ uid }: { uid: string }) {
                 ) : (
                   <button
                     className="btn small primary"
-                    disabled={importing.has(fe.audioUrl) || !online}
-                    onClick={() => void doImport(fe.audioUrl, fe.title)}
+                    disabled={importing.has(fe.audioUrl) || !online || episodes === undefined}
+                    onClick={() => void doImport(fe)}
                   >
                     {importing.has(fe.audioUrl) ? <span className="spinner" style={{ width: 16, height: 16 }} /> : "Import"}
                   </button>
