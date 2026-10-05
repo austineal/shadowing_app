@@ -5,6 +5,7 @@ import { formatDay, formatMinutes } from "../lib/drill/labels";
 import { scheduleOptions } from "../lib/drill/prepare";
 import { dayNumber, dayStart } from "../lib/drill/srs";
 import type { Drill, DrillSchedule } from "../types";
+import { Info } from "./Info";
 
 const DAYS = 14;
 
@@ -27,7 +28,14 @@ export function ReviewForecast(props: { schedule: DrillSchedule; drills: Drill[]
   const day = (d: (typeof load)[number]) => formatDay(d.day, now);
   return (
     <div className="forecast">
-      <div className="small">Reviews ahead</div>
+      <div className="small">
+        Reviews ahead
+        <Info>
+          Each bar is a session day over the next two weeks, if every review goes well: full height is the time that day's
+          sessions have, and the rest of a session learns new passages.
+          {schedule.newMaterial && " New passages wait while one more would overfill a session in the coming week."}
+        </Info>
+      </div>
       <div className="forecast-bars">
         {load.map((d) => (
           <div
@@ -45,7 +53,6 @@ export function ReviewForecast(props: { schedule: DrillSchedule; drills: Drill[]
       <div className="small muted">
         Busiest: {day(busiest)}, with {amount(busiest)}
         {share(busiest) > 1 ? ", so some will wait for the next session" : ""}.
-        {schedule.newMaterial && " New passages wait while one more would overfill a session in the coming week."}
       </div>
     </div>
   );

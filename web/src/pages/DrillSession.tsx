@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { Info } from "../components/Info";
 import { PhraseStudySheet } from "../components/PhraseStudySheet";
 import { playedSeconds, useDrillPlayer, type DrillAudioOptions } from "../hooks/useDrillPlayer";
 import { useDrillStudy } from "../hooks/useDrillStudy";
@@ -506,9 +507,9 @@ function SessionView(props: { uid: string; prepared: Prepared; onLearnAnyway: ()
                 Skip ›
               </button>
             </div>
-            <p className="small muted" style={{ textAlign: "center" }}>
-              Press Missed if you couldn't say it. Lock screen: ⏮ missed, ⏭ skip.
-            </p>
+            <div style={{ textAlign: "center" }}>
+              <Info label="How to answer">Press Missed if you couldn't say it. Lock screen: ⏮ missed, ⏭ skip.</Info>
+            </div>
           </div>
         </>
       ) : plan.blocks.length === 0 ? (
@@ -593,13 +594,15 @@ function SessionView(props: { uid: string; prepared: Prepared; onLearnAnyway: ()
           )}
           {note && <p className="small muted">{note}</p>}
 
-          <button className="btn primary drill-start" disabled={!clips} onClick={start}>
-            Start
-          </button>
-          <p className="small muted">
-            Keeps going with the screen off. When you hear the English, say the original before it plays. If you couldn't, press
-            Missed (⏮ on the lock screen or headset) and it gets extra practice.
-          </p>
+          <div className="row" style={{ justifyContent: "center" }}>
+            <button className="btn primary drill-start" disabled={!clips} onClick={start}>
+              Start
+            </button>
+            <Info label="How a session works">
+              Keeps going with the screen off. When you hear the English, say the original before it plays. If you couldn't, press
+              Missed (⏮ on the lock screen or headset) and it gets extra practice.
+            </Info>
+          </div>
         </div>
       )}
     </div>

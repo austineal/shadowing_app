@@ -4,6 +4,7 @@ import { ENGLISH_VOICES, loadVoice, synthesize } from "../lib/tts/client";
 import { languageLabel } from "../lib/languages";
 import type { Study } from "../hooks/useStudy";
 import { CEFR_LEVELS, type CefrLevel, type Episode, type PracticeSettings } from "../types";
+import { Info } from "./Info";
 
 /** Study-mode controls in the practice settings sheet. */
 export function StudySection(props: {
@@ -67,9 +68,7 @@ export function StudySection(props: {
           <button className="btn small primary" disabled={!level || busy} onClick={() => void run()}>
             {busy ? "Starting…" : "Turn on study mode"}
           </button>
-          <p className="small muted" style={{ marginTop: 6 }}>
-            Claude translates each phrase and explains grammar, idioms and colloquial speech above your level.
-          </p>
+          <Info>Claude translates each phrase and explains grammar, idioms and colloquial speech above your level.</Info>
         </>
       ) : (
         <>
@@ -78,6 +77,7 @@ export function StudySection(props: {
               Translations:{" "}
               {total === 0 ? "…" : done >= total ? <span className="pill ready">ready</span> : `${done} / ${total}`}
               {st.level && <span className="muted"> · notes for {st.level}</span>}
+              {props.drilled && <Info>Drills use these translations, so study mode stays on while it's drilled.</Info>}
             </span>
             <button
               className="btn small"
@@ -88,7 +88,6 @@ export function StudySection(props: {
               Turn off
             </button>
           </div>
-          {props.drilled && <p className="small muted">Drills use these translations, so study mode stays on while it's drilled.</p>}
           {level && level !== st.level && (
             <button className="btn small" style={{ marginTop: 8 }} disabled={busy} onClick={() => void run()}>
               Redo notes for {level}
@@ -181,10 +180,10 @@ function EnglishAudio(props: { study: Study; settings: PracticeSettings; onChang
                 : "Downloading…"
               : "Download voice (about 60 MB)"}
           </button>
-          <p className="small muted" style={{ marginTop: 6 }}>
-            The translations are read aloud on this device, so the voice is downloaded once and then works offline. Keep
-            the screen on while it downloads.
-          </p>
+          <Info>
+            The translations are read aloud on this device, so the voice is downloaded once and then works offline. Keep the
+            screen on while it downloads.
+          </Info>
         </>
       ) : (
         <div className="row" style={{ justifyContent: "space-between", marginTop: 8 }}>

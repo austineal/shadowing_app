@@ -30,6 +30,7 @@ import { DrillNeedsStudy } from "../components/DrillNeedsStudy";
 import { buildDeck } from "../lib/deck";
 import { ExcerptSuggestionsSheet } from "../components/ExcerptSuggestions";
 import { OfflineButton } from "../components/OfflineButton";
+import { Info } from "../components/Info";
 import { PassageLabel } from "../components/PassageMap";
 import { StudySection } from "../components/StudySection";
 import { PhraseStudySheet } from "../components/PhraseStudySheet";
@@ -725,7 +726,10 @@ function SettingsSheet(props: {
         </div>
         <div className="slider">
           <div className="row">
-            <span>Repeats per phrase (Auto-advance)</span>
+            <span>
+              Repeats per phrase (Auto-advance)
+              <Info>In Auto mode each phrase plays this many times, with a pause after each, before moving to the next one.</Info>
+            </span>
             <span className="muted">{repeats === 1 ? "once" : `${repeats}×`}</span>
           </div>
           <input type="range" min={1} max={MAX_REPEATS} step={1} value={repeats} onChange={(e) => set({ repeats: Number(e.target.value) })} />
@@ -736,9 +740,6 @@ function SettingsSheet(props: {
               </button>
             ))}
           </div>
-          <p className="small muted" style={{ marginTop: 4 }}>
-            In Auto mode each phrase plays this many times, with a pause after each, before moving to the next one.
-          </p>
         </div>
 
         {props.episode.kind !== "deck" && (
@@ -804,16 +805,17 @@ function SettingsSheet(props: {
 
         <hr />
         <div className="row" style={{ justifyContent: "space-between" }}>
-          <span>Offline copy</span>
+          <span>
+            Offline copy
+            <Info>Saves the audio and word timings on this device so the episode plays without a connection.</Info>
+          </span>
           <OfflineButton uid={props.uid} episode={props.episode} />
         </div>
-        <p className="small muted" style={{ marginTop: 6 }}>
-          Saves the audio and word timings on this device so the episode plays without a connection.
-        </p>
 
         <hr />
         <p className="small muted">
-          Keyboard: space play/pause · ← → previous/next · r repeat. Lock-screen next/previous buttons also work.
+          Keyboard shortcuts
+          <Info>Space play/pause · ← → previous/next · r repeat. Lock-screen next/previous buttons also work.</Info>
         </p>
         <button className="btn" style={{ marginTop: 14, width: "100%" }} onClick={props.onClose}>
           Close

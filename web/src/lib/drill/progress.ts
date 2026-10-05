@@ -50,6 +50,45 @@ export function formatProgress(p: Progress): string {
     .join(" · ");
 }
 
+/** A cell of the progress map: one passage, or a run of them when there are too many to show singly. */
+export interface MapCell {
+  /** The first passage in the cell, and one past the last. */
+  from: number;
+  to: number;
+  /** The most common stage in the cell (the less advanced on a tie). */
+  stage: PassageStage;
+  /** How many passages in the cell are at each stage. */
+  stages: Partial<Record<PassageStage, number>>;
+  due: number;
+  /** Total audio length, for sizing the cell in a strip. */
+  seconds: number;
+}
+
+const STAGES: PassageStage[] = ["new", "learning", "fresh", "growing", "solid"];
+
+/** The map's cells: one per passage, or runs of equal size so there are at most `max` cells. */
+export function mapCells(drill: Drill, now: number, max: number): MapCell[] {
+  const n = drill.passages.length;
+  const size = Math.max(1, Math.ceil(n / max));
+  const cells: MapCell[] = [];
+  for (let from = 0; from < n; from += size) {
+    const to = Math.min(n, from + size);
+    const stages: MapCell["stages"] = {};
+    let due = 0;
+    let seconds = 0;
+    for (let i = from; i < to; i++) {
+      const s = passageStage(drill, i);
+      stages[s] = (stages[s] ?? 0) + 1;
+      const p = drill.passages[i];
+      if (isDue(p, now)) due++;
+      seconds += p.end - p.start;
+    }
+    const stage = STAGES.reduce((a, s) => ((stages[s] ?? 0) > (stages[a] ?? 0) ? s : a));
+    cells.push({ from, to, stage, stages, due, seconds });
+  }
+  return cells;
+}
+
 /** A phrase of an episode that lies in a drilled excerpt. */
 export interface PhraseMark {
   drill: Drill;

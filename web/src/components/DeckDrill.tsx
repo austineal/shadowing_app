@@ -7,6 +7,7 @@ import { drillScheduleKey, scheduleLabel, schedulesOf } from "../lib/drill/sched
 import { setDrillSchedule, setSchedule } from "../lib/drill/store";
 import { languageLabel } from "../lib/languages";
 import type { Drill, Episode, Segment } from "../types";
+import { Info } from "./Info";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -80,9 +81,9 @@ export function DeckDrill(props: {
       <p className="picker-title">{episode.title}</p>
       {drill && !done ? (
         <>
-          <p className="small">{formatProgress(progressOf([drill], now)).replace(/^(\d+) of (\d+)/, "$1 of $2 cards")}</p>
-          <p className="small muted">
-            Each session reviews the cards that are due, in shuffled rounds, then learns new ones five at a time.
+          <p className="small">
+            {formatProgress(progressOf([drill], now)).replace(/^(\d+) of (\d+)/, "$1 of $2 cards")}
+            <Info>Each session reviews the cards that are due, in shuffled rounds, then learns new ones five at a time.</Info>
           </p>
           <SchedulePicker
             keys={keys}
