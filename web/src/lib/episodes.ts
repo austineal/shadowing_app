@@ -278,6 +278,7 @@ export async function getSegmentsOnce(uid: string, episodeId: string): Promise<S
 export interface FeedEpisode {
   title: string;
   audioUrl: string;
+  guid?: string;
   mimeType?: string;
   pubDate?: string;
   durationSec?: number;
@@ -293,7 +294,7 @@ export interface FeedResult {
 
 const fetchFeedFn = httpsCallable<{ url: string }, FeedResult>(functions, "fetchFeed");
 const importEpisodeFn = httpsCallable<
-  { audioUrl: string; title: string; language: string; feedTitle?: string; feedUrl?: string; folderId?: string | null },
+  { audioUrl: string; title: string; guid?: string; language: string; feedTitle?: string; feedUrl?: string; folderId?: string | null },
   { episodeId: string }
 >(functions, "importEpisode");
 const retranscribeFn = httpsCallable<{ episodeId: string }, { status: string; error: string | null }>(functions, "retranscribeEpisode");
@@ -305,6 +306,7 @@ export async function fetchFeed(url: string): Promise<FeedResult> {
 export async function importFeedEpisode(params: {
   audioUrl: string;
   title: string;
+  guid?: string;
   language: string;
   feedTitle?: string;
   feedUrl?: string;

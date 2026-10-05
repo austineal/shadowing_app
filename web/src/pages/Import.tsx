@@ -3,12 +3,14 @@ import { Link, useNavigate } from "react-router-dom";
 import { FolderSelect } from "../components/FolderSelect";
 import { ShowMore } from "../components/ShowMore";
 import { usePaged } from "../hooks/usePaged";
+import { useEpisodes } from "../hooks/useEpisode";
 import { LanguageSelect } from "../components/LanguageSelect";
 import { useFolders, useSubscriptions } from "../hooks/useLibrary";
-import { fetchFeed, importFeedEpisode, uploadEpisode, type FeedResult } from "../lib/episodes";
+import { fetchFeed, importFeedEpisode, uploadEpisode, type FeedEpisode, type FeedResult } from "../lib/episodes";
 import { subscribe } from "../lib/library";
 import { ROLE_LABEL, guessColumns, hasHeader, parseCsv, readCards, uploadDeck, type Columns, type Role } from "../lib/deck";
 import { formatDuration, titleFromFilename } from "../lib/format";
+import { importedLookup } from "../lib/organise";
 import { loadRecentFeeds, rememberFeed } from "../lib/settings";
 
 const LANG_KEY = "shadowing.lastLanguage";
@@ -338,6 +340,8 @@ function FeedForm({ uid, language, folderId }: { uid: string; language: string; 
   const [feedUrl, setFeedUrl] = useState("");
   const currentSub = subscriptions?.find((s) => s.feedUrl === feedUrl);
   const paged = usePaged("import-feed", feed?.episodes ?? []);
+  const { episodes } = useEpisodes(uid);
+  const findImported = useMemo(() => importedLookup(episodes ?? [], feedUrl), [episodes, feedUrl]);
 
   const load = async (u: string) => {
     setUrl(u);
@@ -356,11 +360,11 @@ function FeedForm({ uid, language, folderId }: { uid: string; language: string; 
     }
   };
 
-  const doImport = async (audioUrl: string, title: string) => {
+  const doImport = async ({ audioUrl, title, guid }: FeedEpisode) => {
     setImporting(audioUrl);
     setError(undefined);
     try {
-      const id = await importFeedEpisode({ audioUrl, title, language, folderId, feedTitle: feed?.title, feedUrl });
+      const id = await importFeedEpisode({ audioUrl, title, guid, language, folderId, feedTitle: feed?.title, feedUrl });
       nav(`/episode/${id}`, { replace: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -451,25 +455,34 @@ function FeedForm({ uid, language, folderId }: { uid: string; language: string; 
             )}
           </div>
           <div className="list" style={{ padding: 0 }}>
-            {paged.shown.map((ep) => (
-              <div key={ep.audioUrl} className="card">
-                <div className="body">
-                  <div className="title">{ep.title}</div>
-                  <div className="meta">
-                    {ep.pubDate ? <span>{new Date(ep.pubDate).toLocaleDateString()}</span> : null}
-                    {ep.durationSec ? <span>{formatDuration(ep.durationSec)}</span> : null}
+            {paged.shown.map((ep) => {
+              const imported = findImported(ep);
+              return (
+                <div key={ep.audioUrl} className="card">
+                  <div className="body">
+                    <div className="title">{ep.title}</div>
+                    <div className="meta">
+                      {ep.pubDate ? <span>{new Date(ep.pubDate).toLocaleDateString()}</span> : null}
+                      {ep.durationSec ? <span>{formatDuration(ep.durationSec)}</span> : null}
+                    </div>
+                    {ep.description ? <p className="small muted feed-desc">{ep.description}</p> : null}
                   </div>
-                  {ep.description ? <p className="small muted feed-desc">{ep.description}</p> : null}
+                  {imported ? (
+                    <Link to={`/episode/${imported.id}`} className="btn small">
+                      Open
+                    </Link>
+                  ) : (
+                    <button
+                      className="btn small primary"
+                      disabled={importing !== null || episodes === undefined}
+                      onClick={() => void doImport(ep)}
+                    >
+                      {importing === ep.audioUrl ? <span className="spinner" style={{ width: 16, height: 16 }} /> : "Import"}
+                    </button>
+                  )}
                 </div>
-                <button
-                  className="btn small primary"
-                  disabled={importing !== null}
-                  onClick={() => void doImport(ep.audioUrl, ep.title)}
-                >
-                  {importing === ep.audioUrl ? <span className="spinner" style={{ width: 16, height: 16 }} /> : "Import"}
-                </button>
-              </div>
-            ))}
+              );
+            })}
             <ShowMore paged={paged} />
           </div>
         </div>
