@@ -5,6 +5,7 @@ import { ShowMore } from "../components/ShowMore";
 import { usePaged } from "../hooks/usePaged";
 import { useEpisodes } from "../hooks/useEpisode";
 import { LanguageSelect } from "../components/LanguageSelect";
+import { Info } from "../components/Info";
 import { useFolders, useSubscriptions } from "../hooks/useLibrary";
 import { fetchFeed, importFeedEpisode, uploadEpisode, type FeedEpisode, type FeedResult } from "../lib/episodes";
 import { subscribe } from "../lib/library";
@@ -207,12 +208,14 @@ function DeckForm({ uid, language, folderId }: { uid: string; language: string; 
   if (language === "auto") return <p className="small muted">Choose the deck's language first.</p>;
   return (
     <div>
-      <p className="small muted" style={{ marginTop: 0 }}>
-        A CSV with a row per card (its audio file, the sentence, and optionally English audio and English text), and
-        the audio files it names. The cards are joined into one recording and added to your drills, to learn card by card.
-      </p>
       <div className="field">
-        <label>Card list (CSV or TSV)</label>
+        <label>
+          Card list (CSV or TSV)
+          <Info>
+            A CSV with a row per card (its audio file, the sentence, and optionally English audio and English text), and the
+            audio files it names. The cards are joined into one recording and added to your drills, to learn card by card.
+          </Info>
+        </label>
         <input
           className="input"
           type="file"

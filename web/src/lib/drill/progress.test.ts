@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatProgress, passageStage, progressOf, transcriptMarks } from "./progress";
+import { formatProgress, mapCells, passageStage, progressOf, transcriptMarks } from "./progress";
 import type { Drill, DrillPassage } from "../../types";
 
 const now = new Date(2026, 4, 10, 9).getTime();
@@ -71,5 +71,30 @@ describe("transcriptMarks", () => {
     for (const d of [drill([{}, {}]), drill([learned(1), learned(3)])]) {
       expect([...transcriptMarks(phrases, [d], now).values()].some((m) => m.learnedTo)).toBe(false);
     }
+  });
+});
+
+describe("mapCells", () => {
+  it("gives each passage a cell when they fit", () => {
+    const d = drill([learned(5), learned(1, now - DAY), {}]);
+    const cells = mapCells(d, now, 10);
+    expect(cells.map((c) => [c.from, c.to, c.stage, c.due])).toEqual([
+      [0, 1, "solid", 0],
+      [1, 2, "fresh", 1],
+      [2, 3, "new", 0],
+    ]);
+  });
+
+  it("groups a big deck into runs, each showing its most common stage", () => {
+    const d = drill(Array.from({ length: 450 }, (_, i) => (i < 300 ? learned(i % 3 === 0 ? 1 : 5, i % 30 === 0 ? now - 1 : now + DAY) : {})));
+    const cells = mapCells(d, now, 200);
+    expect(cells).toHaveLength(150);
+    expect(cells[0]).toMatchObject({ from: 0, to: 3, stage: "solid", stages: { fresh: 1, solid: 2 }, due: 1, seconds: 60 });
+    expect(cells[149]).toMatchObject({ from: 447, to: 450, stage: "new" });
+  });
+
+  it("prefers the less advanced stage on a tie", () => {
+    const d = drill([learned(5), {}]);
+    expect(mapCells(d, now, 1)[0].stage).toBe("new");
   });
 });

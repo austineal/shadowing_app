@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { Info } from "../components/Info";
 import { PassageMap, PassageMapKey } from "../components/PassageMap";
 import { ReviewForecast } from "../components/ReviewForecast";
 import { useEpisodes } from "../hooks/useEpisode";
@@ -52,13 +53,15 @@ export default function DrillSettings({ uid }: { uid: string }) {
         <Link to="/" className="btn ghost icon" aria-label="Back">
           ‹
         </Link>
-        <h1>Drill schedules</h1>
+        <h1>
+          Drill schedules
+          <Info>
+            Each language you drill gets its own rhythm, and can have more than one schedule, say one per podcast or deck. A
+            session reviews what's due first, then learns new passages of your current excerpt with the time left. Choose
+            excerpts from an episode's <b>Drill</b> button.
+          </Info>
+        </h1>
       </header>
-      <p className="section small muted" style={{ paddingBottom: 0 }}>
-        Each language you drill gets its own rhythm, and can have more than one schedule, say one per podcast or deck. A session
-        reviews what's due first, then learns new passages of your current excerpt with the time left. Choose excerpts from an
-        episode's <b>Drill</b> button.
-      </p>
       {!!drills?.length && (
         <div className="section" style={{ paddingBottom: 0 }}>
           <PassageMapKey />
@@ -359,7 +362,13 @@ function EnglishVoice({ uid, voice }: { uid: string; voice: string }) {
   return (
     <div>
       <label className="field-row">
-        <span>English voice</span>
+        <span>
+          English voice
+          <Info>
+            Reads the English cues on this device, so drills work offline once it's downloaded. The clips it makes are kept,
+            and made ahead while the library is open, so sessions can start at once.
+          </Info>
+        </span>
         <select className="input" value={voice} onChange={(e) => void setDrillVoice(uid, e.target.value).catch((err) => setError(String(err)))}>
           {ENGLISH_VOICES.map((v) => (
             <option key={v.id} value={v.id}>
@@ -377,10 +386,6 @@ function EnglishVoice({ uid, voice }: { uid: string; voice: string }) {
             : "Download voice (about 60 MB)"}
         </button>
       )}
-      <p className="small muted" style={{ marginTop: 6 }}>
-        Reads the English cues on this device, so drills work offline once it's downloaded. The clips it makes are kept, and
-        made ahead while the library is open, so sessions can start at once.
-      </p>
       <div className="row small" style={{ marginTop: 8, justifyContent: "space-between" }}>
         <span className="muted">English clips on this device: {formatBytes(clipBytes)}</span>
         <button

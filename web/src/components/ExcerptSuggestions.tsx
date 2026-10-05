@@ -11,6 +11,7 @@ import { languageLabel } from "../lib/languages";
 import { loadDefaultSettings } from "../lib/settings";
 import { setStudyLevel, subscribeStudyLevels } from "../lib/study";
 import { CEFR_LEVELS, type CefrLevel, type Drill, type Episode, type ExcerptSection, type Segment } from "../types";
+import { Info } from "./Info";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -93,12 +94,14 @@ export function ExcerptSuggestionsSheet(props: {
   return (
     <div className="sheet-backdrop" onClick={props.onClose}>
       <div className="sheet suggestions-sheet" onClick={(e) => e.stopPropagation()}>
-        <h2>Suggested excerpts</h2>
-        <p className="small muted">
-          Claude splits the episode into self-contained sections of about {minutes} minutes: roughly two weeks of new material at
-          your {languageLabel(language)} pace{pace.measured ? "" : " (estimated from your schedule until you've drilled for two weeks)"}
-          .
-        </p>
+        <h2>
+          Suggested excerpts
+          <Info>
+            Claude splits the episode into self-contained sections of about {minutes} minutes: roughly two weeks of new material
+            at your {languageLabel(language)} pace
+            {pace.measured ? "" : " (estimated from your schedule until you've drilled for two weeks)"}.
+          </Info>
+        </h2>
 
         {!level && (
           <label className="row small" style={{ marginTop: 10 }}>
@@ -128,10 +131,10 @@ export function ExcerptSuggestionsSheet(props: {
             <button className="btn primary" disabled={busy || !level} onClick={() => void run()}>
               {busy ? "Reading the transcript…" : "Suggest excerpts"}
             </button>
-            <p className="small muted" style={{ marginTop: 8 }}>
+            <Info>
               Claude reads the whole transcript, which takes a minute or two for a long episode. You can close this and come back;
               the suggestions are saved with the episode.
-            </p>
+            </Info>
           </div>
         ) : (
           <>

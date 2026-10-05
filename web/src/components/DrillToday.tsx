@@ -9,6 +9,7 @@ import { drillVoice } from "../lib/drill/prepare";
 import { isDue } from "../lib/drill/srs";
 import { drillScheduleKey, logScheduleKey, scheduleLabel } from "../lib/drill/schedules";
 import type { Drill, DrillPrefs, DrillSchedule, DrillSessionLog } from "../types";
+import { Info } from "./Info";
 import { PassageMap } from "./PassageMap";
 
 interface Row {
@@ -86,7 +87,8 @@ export function DrillToday({
   if (rows.length === 0) {
     return (
       <p className="drill-intro small muted">
-        <b>Drill</b>: learn to say passages of an episode from their English, on a schedule for each language.{" "}
+        <b>Drill</b>
+        <Info>Learn to say passages of an episode from their English, on a schedule for each language.</Info>
         <Link to="/drill/settings">Set up ›</Link>
       </p>
     );
