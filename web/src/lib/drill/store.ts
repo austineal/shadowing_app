@@ -173,19 +173,6 @@ export async function loadTranslations(uid: string, language: string, texts: str
   return new Map(found.filter((x) => x !== undefined));
 }
 
-const prepareDrillStudyFn = httpsCallable<
-  { episodeId: string; language: string; start: number; end: number; retry?: boolean },
-  { total: number; missing: number }
->(functions, "prepareDrillStudy");
-
-/**
- * Queues translations (and study notes) for the phrases of an excerpt only, without turning on
- * study mode for the whole episode. Needs the learner's level for the language to be set.
- */
-export async function prepareDrillStudy(params: { episodeId: string; language: string; start: number; end: number; retry?: boolean }) {
-  return (await prepareDrillStudyFn(params)).data;
-}
-
 const suggestionsDoc = (uid: string, episodeId: string) => doc(db, "users", uid, "episodes", episodeId, "data", "excerpts");
 
 /** Claude's excerpt suggestions for an episode, live; null when there are none yet. */

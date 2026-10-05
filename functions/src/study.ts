@@ -8,8 +8,8 @@
  * recurs across episodes is only done once. Each phrase doc lists the episodes that use it so the
  * client can subscribe to one episode's material with a single query.
  *
- * prepareStudy (callable) works out what is missing and queues the work, and prepareDrillStudy does
- * the same for one excerpt (for drills). studyChunk runs one Claude batch as a task-queue function,
+ * prepareStudy (callable) works out what is missing and queues the work. Drills need study mode
+ * on, since their English cues are its translations. studyChunk runs one Claude batch as a task-queue function,
  * so long episodes don't hit request timeouts and failed batches retry on their own.
  */
 import { createHash } from "node:crypto";
@@ -137,17 +137,27 @@ async function loadStudyRequest(req: CallableRequest<unknown>): Promise<StudyReq
 
   const epSnap = await episodeRef(uid, episodeId).get();
   if (!epSnap.exists) throw new HttpsError("not-found", "Episode not found.");
+  const r = await studyRequest(uid, episodeId, language, data.retry === true);
+  if (r.segments.length === 0) throw new HttpsError("failed-precondition", "This episode has no phrases yet.");
+  const { level } = r;
+  if (!level) throw new HttpsError("failed-precondition", "Set your level for this language first.");
+  return { ...r, level };
+}
+
+/** Loads an episode's phrases and the learner's level for the language (undefined when not set). */
+async function studyRequest(uid: string, episodeId: string, language: string, retry: boolean) {
   const segSnap = await db.doc(`users/${uid}/episodes/${episodeId}/data/segments`).get();
   const segments = (segSnap.get("segments") ?? []) as StudyRequest["segments"];
-  if (segments.length === 0) throw new HttpsError("failed-precondition", "This episode has no phrases yet.");
-
   const prefs = await db.doc(`users/${uid}/prefs/study`).get();
   const level = prefs.get("levels")?.[language] as CefrLevel | undefined;
-  if (!level || !CEFR_LEVELS.includes(level)) {
-    throw new HttpsError("failed-precondition", "Set your level for this language first.");
-  }
-
-  return { uid, episodeId, language, level, segments, nonce: data.retry === true ? `/${Date.now()}` : "" };
+  return {
+    uid,
+    episodeId,
+    language,
+    level: level && CEFR_LEVELS.includes(level) ? level : undefined,
+    segments,
+    nonce: retry ? `/${Date.now()}` : "",
+  };
 }
 
 /**
@@ -198,12 +208,8 @@ async function queueMissing(r: StudyRequest, missing: PhraseItem[]) {
   }
 }
 
-/**
- * Turns study mode on for an episode and queues whatever is
- * missing. Safe to call repeatedly, e.g. after phrases are split or merged.
- */
-export const prepareStudy = onCall({ region: REGION, timeoutSeconds: 120 }, async (req) => {
-  const r = await loadStudyRequest(req);
+/** Turns study mode on for an episode and queues whatever is missing. */
+async function startStudy(r: StudyRequest) {
   const { items, missing } = await linkDone(r, r.segments);
 
   await episodeRef(r.uid, r.episodeId).update({
@@ -217,34 +223,25 @@ export const prepareStudy = onCall({ region: REGION, timeoutSeconds: 120 }, asyn
   await queueMissing(r, missing);
   logger.info("Study queued", { uid: r.uid, episodeId: r.episodeId, total: items.length, missing: missing.length });
   return { total: items.length, missing: missing.length };
-});
+}
 
 /**
- * Queues study material for the phrases of one excerpt, which a drill needs for its English cues.
- * Unlike prepareStudy it leaves study mode off for the episode, so drilling ten minutes of a long
- * episode doesn't translate the whole of it. The transcript Claude reads for context is still the
- * whole episode. Takes the excerpt as start and end times in seconds; a phrase belongs to it when
- * its midpoint falls inside.
+ * Turns study mode on for an episode and queues whatever is
+ * missing. Safe to call repeatedly, e.g. after phrases are split or merged.
  */
-export const prepareDrillStudy = onCall({ region: REGION, timeoutSeconds: 120 }, async (req) => {
-  const r = await loadStudyRequest(req);
-  const data = (req.data ?? {}) as { start?: unknown; end?: unknown };
-  const start = typeof data.start === "number" ? data.start : NaN;
-  const end = typeof data.end === "number" ? data.end : NaN;
-  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
-    throw new HttpsError("invalid-argument", "The excerpt's start and end times are required.");
-  }
-  const inside = r.segments.filter((s) => {
-    const mid = (s.start + s.end) / 2;
-    return mid >= start && mid <= end;
-  });
-  if (inside.length === 0) throw new HttpsError("failed-precondition", "No phrases fall inside that excerpt.");
+export const prepareStudy = onCall({ region: REGION, timeoutSeconds: 120 }, async (req) => startStudy(await loadStudyRequest(req)));
 
-  const { items, missing } = await linkDone(r, inside);
-  await queueMissing(r, missing);
-  logger.info("Drill study queued", { uid: r.uid, episodeId: r.episodeId, start, end, total: items.length, missing: missing.length });
-  return { total: items.length, missing: missing.length };
-});
+/**
+ * Turns study mode on for a freshly built deck, which drills need. Returns false, leaving it off,
+ * when the learner hasn't set their level for the language.
+ */
+export async function startDeckStudy(uid: string, episodeId: string, language: string): Promise<boolean> {
+  const r = await studyRequest(uid, episodeId, language, false);
+  const { level } = r;
+  if (!level || r.segments.length === 0) return false;
+  await startStudy({ ...r, level });
+  return true;
+}
 
 /** One Claude batch: translations and notes for up to STUDY_BATCH phrases. */
 export const studyChunk = onTaskDispatched<StudyChunkTask>(

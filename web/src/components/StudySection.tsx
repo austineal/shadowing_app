@@ -11,6 +11,8 @@ export function StudySection(props: {
   episode: Episode;
   language: string;
   study: Study;
+  /** Drills need study mode, so it can't be turned off while the episode is drilled. */
+  drilled: boolean;
   settings: PracticeSettings;
   onChange: (patch: Partial<PracticeSettings>) => void;
 }) {
@@ -77,10 +79,16 @@ export function StudySection(props: {
               {total === 0 ? "…" : done >= total ? <span className="pill ready">ready</span> : `${done} / ${total}`}
               {st.level && <span className="muted"> · notes for {st.level}</span>}
             </span>
-            <button className="btn small" disabled={busy} onClick={() => void disableStudy(uid, episode.id)}>
+            <button
+              className="btn small"
+              disabled={busy || props.drilled}
+              title={props.drilled ? "Drills need study mode; remove this episode's drills first" : undefined}
+              onClick={() => void disableStudy(uid, episode.id)}
+            >
               Turn off
             </button>
           </div>
+          {props.drilled && <p className="small muted">Drills use these translations, so study mode stays on while it's drilled.</p>}
           {level && level !== st.level && (
             <button className="btn small" style={{ marginTop: 8 }} disabled={busy} onClick={() => void run()}>
               Redo notes for {level}

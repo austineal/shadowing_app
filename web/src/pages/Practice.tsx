@@ -26,6 +26,7 @@ import { episodeSettings, loadDefaultSettings, saveDefaultSettings } from "../li
 import { useOnline } from "../lib/offline";
 import { ExcerptPicker } from "../components/ExcerptPicker";
 import { DeckDrill } from "../components/DeckDrill";
+import { DrillNeedsStudy } from "../components/DrillNeedsStudy";
 import { buildDeck } from "../lib/deck";
 import { ExcerptSuggestionsSheet } from "../components/ExcerptSuggestions";
 import { OfflineButton } from "../components/OfflineButton";
@@ -497,7 +498,17 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
       </div>
 
       <div className="dock">
-        {deckDrilling ? (
+        {(deckDrilling || picking) && !study.enabled ? (
+          <DrillNeedsStudy
+            uid={uid}
+            episode={episode}
+            language={language}
+            onClose={() => {
+              setDeckDrilling(false);
+              stopPicking();
+            }}
+          />
+        ) : deckDrilling ? (
           <DeckDrill
             uid={uid}
             episode={episode}
@@ -626,7 +637,7 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
         )}
       </div>
 
-      {suggesting && (
+      {suggesting && study.enabled && (
         <ExcerptSuggestionsSheet
           uid={uid}
           episode={episode}
@@ -657,6 +668,7 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
           episode={episode}
           language={language}
           study={study}
+          drilled={episodeDrills.length > 0}
           modeLabel={modeLabel}
           busy={busy}
           onChange={setSettings}
@@ -676,6 +688,8 @@ function SettingsSheet(props: {
   episode: Episode;
   language: string;
   study: Study;
+  /** The episode has excerpts (or, for a deck, its cards) in the drills. */
+  drilled: boolean;
   modeLabel: string;
   busy?: string;
   onChange: (s: PracticeSettings) => void;
@@ -783,6 +797,7 @@ function SettingsSheet(props: {
           episode={props.episode}
           language={props.language}
           study={props.study}
+          drilled={props.drilled}
           settings={settings}
           onChange={set}
         />
