@@ -6,7 +6,7 @@ import * as logger from "firebase-functions/logger";
 import { db, bucket } from "./admin.js";
 import { REGION, elevenLabsApiKey, scribeModelId } from "./config.js";
 import { transcribeAudio } from "./elevenlabs.js";
-import { isVbrMp3, toCbrMp3 } from "./normalize.js";
+import { isVbrMp3, toCbrMp3 } from "./audio.js";
 import { assertAllowed } from "./auth.js";
 
 const AUDIO_PATH_RE = /^users\/([^/]+)\/episodes\/([^/]+)\/audio\.([A-Za-z0-9]+)$/;
@@ -18,7 +18,7 @@ const CLAIMABLE = new Set(["uploading", "uploaded", "error"]);
  * Transcribes the audio for one episode and writes words.json to Storage.
  * Idempotent: only one run claims the episode; others exit early.
  */
-export async function runTranscription(uid: string, episodeId: string, audioPath: string): Promise<void> {
+async function runTranscription(uid: string, episodeId: string, audioPath: string): Promise<void> {
   const ref = db.doc(`users/${uid}/episodes/${episodeId}`);
 
   const claimed = await db.runTransaction(async (tx) => {

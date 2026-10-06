@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createGraph, schedule, startOutput, type Graph } from "../lib/audioGraph";
-import { gapSeconds, nextAction, stepsAfterSource, type ClipKind, type FollowStep } from "../lib/sequence";
+import { gapSeconds, nextAction, stepsAfterSource, type FollowStep } from "../lib/sequence";
 import type { PracticeSettings, Segment } from "../types";
 
 /** playing: source audio. clip: an extra clip (translation etc.). gap: silence for the user to speak. */
-export type PlayerPhase = "idle" | "playing" | "clip" | "gap";
+type PlayerPhase = "idle" | "playing" | "clip" | "gap";
 
 interface Options {
   segments: Segment[];
@@ -14,7 +14,7 @@ interface Options {
    * Extra audio for a phrase: the clip, a promise of one still being prepared (waited for up to
    * CLIP_WAIT_SEC), or undefined to skip it.
    */
-  getClip?: (index: number, clip: ClipKind) => AudioBuffer | Promise<AudioBuffer | undefined> | undefined;
+  getClip?: (index: number) => AudioBuffer | Promise<AudioBuffer | undefined> | undefined;
 }
 
 /** How long a clip that is still being generated may hold up playback before it's skipped. */
@@ -202,7 +202,7 @@ export function useSegmentPlayer(audioSrc: string | undefined, opts: Options) {
     // Clips play through the same graph so the background keep-alive stream carries them,
     // and their end fires on the audio clock like the gap timers.
     const g = graphRef.current;
-    const clip = stateRef.current.getClip?.(i, step.clip);
+    const clip = stateRef.current.getClip?.(i);
     if (!g || !clip || g.ctx.state !== "running") {
       advance();
       return;

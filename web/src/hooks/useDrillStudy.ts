@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { isKnownNote, visibleNotes } from "../lib/notes";
 import { normalizePhrase, subscribeEpisodePhrases, subscribeKnownNotes } from "../lib/study";
+import { useLive } from "./useLive";
 import type { KnownNote, PhraseStudy } from "../types";
 
 /**
@@ -27,8 +28,7 @@ export function useDrillStudy(uid: string, language: string, episodeIds: string[
     return () => unsubs.forEach((u) => u());
   }, [uid, idsKey]);
 
-  const [known, setKnown] = useState<KnownNote[]>([]);
-  useEffect(() => subscribeKnownNotes(uid, language, setKnown), [uid, language]);
+  const [known] = useLive<KnownNote[]>((set) => subscribeKnownNotes(uid, language, set), [uid, language], []);
 
   const byText = useMemo(() => {
     const m = new Map<string, PhraseStudy>();

@@ -31,7 +31,7 @@ export interface PlanDrill {
   phrases: SessionPhrase[];
 }
 
-export interface PlanInput {
+interface PlanInput {
   now: number;
   budgetSec: number;
   newMaterial: boolean;
@@ -57,7 +57,7 @@ export interface SessionPlan {
   heldBack?: LoadDay;
 }
 
-export const passagePhrases = (d: PlanDrill, i: number) =>
+const passagePhrases = (d: PlanDrill, i: number) =>
   phrasesIn(d.phrases, d.drill.passages[i].start, d.drill.passages[i].end);
 
 /** New cards learned together, then tested together. */

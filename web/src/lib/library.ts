@@ -60,7 +60,7 @@ function subscriptionsCollection(uid: string) {
 }
 
 /** Deterministic id so subscribing twice to the same feed updates one document. */
-export async function subscriptionId(feedUrl: string): Promise<string> {
+async function subscriptionId(feedUrl: string): Promise<string> {
   const bytes = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(feedUrl.trim()));
   return Array.from(new Uint8Array(bytes), (b) => b.toString(16).padStart(2, "0")).join("");
 }

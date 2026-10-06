@@ -1,16 +1,13 @@
 import type { PracticeSettings, Segment } from "../types";
 
-/** Extra audio that can follow a phrase: currently only its English translation. */
-export type ClipKind = "en";
-
 /** What happens after the phrase's source audio finishes, before the next play is decided. */
-export type FollowStep = { kind: "pause"; sec: number } | { kind: "clip"; clip: ClipKind } | { kind: "gap" };
+export type FollowStep = { kind: "pause"; sec: number } | { kind: "clip" } | { kind: "gap" };
 
 /** Silence between the end of a phrase and its English translation, so the switch isn't abrupt. */
 export const PAUSE_BEFORE_ENGLISH_SEC = 0.8;
 
 /** What to do once a play (source audio plus its follow steps) is complete. */
-export type NextAction = { kind: "replay"; keepPlays: boolean } | { kind: "advance" } | { kind: "stop" };
+type NextAction = { kind: "replay"; keepPlays: boolean } | { kind: "advance" } | { kind: "stop" };
 
 /** Silence after a phrase for the user to speak in: the phrase's length as played, times gapFactor. */
 export function gapSeconds(seg: Segment, settings: PracticeSettings): number {
@@ -25,7 +22,7 @@ export function gapSeconds(seg: Segment, settings: PracticeSettings): number {
 export function stepsAfterSource(settings: PracticeSettings, playNumber: number): FollowStep[] {
   const steps: FollowStep[] = [];
   if (settings.english === "each" || (settings.english === "first" && playNumber === 1)) {
-    steps.push({ kind: "pause", sec: PAUSE_BEFORE_ENGLISH_SEC }, { kind: "clip", clip: "en" });
+    steps.push({ kind: "pause", sec: PAUSE_BEFORE_ENGLISH_SEC }, { kind: "clip" });
   }
   if (settings.mode !== "manual") steps.push({ kind: "gap" });
   return steps;

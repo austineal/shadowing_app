@@ -1,6 +1,6 @@
 import type { Timestamp } from "firebase/firestore";
 
-export type EpisodeStatus = "uploading" | "uploaded" | "transcribing" | "ready" | "error";
+type EpisodeStatus = "uploading" | "uploaded" | "transcribing" | "ready" | "error";
 
 export interface Episode {
   id: string;
@@ -43,7 +43,7 @@ export const CEFR_LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"] as const;
 export type CefrLevel = (typeof CEFR_LEVELS)[number];
 
 /** Study-mode state on the episode document. Written by the prepareStudy function. */
-export interface EpisodeStudy {
+interface EpisodeStudy {
   enabled: boolean;
   language: string;
   /** The learner level the notes were generated for. */

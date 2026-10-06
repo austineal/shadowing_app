@@ -43,11 +43,11 @@ export function episodesCollection(uid: string) {
   return collection(db, "users", uid, "episodes");
 }
 
-export function episodeDoc(uid: string, episodeId: string) {
+function episodeDoc(uid: string, episodeId: string) {
   return doc(db, "users", uid, "episodes", episodeId);
 }
 
-export function segmentsDoc(uid: string, episodeId: string) {
+function segmentsDoc(uid: string, episodeId: string) {
   return doc(db, "users", uid, "episodes", episodeId, "data", "segments");
 }
 
@@ -103,7 +103,7 @@ export async function saveEpisodeSettings(uid: string, episodeId: string, settin
   await updateDoc(episodeDoc(uid, episodeId), { settings });
 }
 
-export interface UploadParams {
+interface UploadParams {
   file: File;
   title: string;
   language: string;

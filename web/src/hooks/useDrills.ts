@@ -1,35 +1,28 @@
 import { useEffect, useState } from "react";
 import { subscribeDrillPrefs, subscribeDrills, subscribeExcerptSuggestions, subscribeRecentSessions } from "../lib/drill/store";
 import { DAY_MS } from "../lib/drill/srs";
+import { useLive } from "./useLive";
 import type { Drill, DrillPrefs, DrillSessionLog, ExcerptSuggestions } from "../types";
 
 /** All drill excerpts, live. undefined while loading. */
 export function useDrills(uid: string) {
-  const [drills, setDrills] = useState<Drill[] | undefined>();
-  useEffect(() => subscribeDrills(uid, setDrills), [uid]);
-  return drills;
+  return useLive<Drill[] | undefined>((set) => subscribeDrills(uid, set), [uid], undefined)[0];
 }
 
 /** Per-language drill schedules, live. undefined while loading. */
 export function useDrillPrefs(uid: string) {
-  const [prefs, setPrefs] = useState<DrillPrefs | undefined>();
-  useEffect(() => subscribeDrillPrefs(uid, setPrefs), [uid]);
-  return prefs;
+  return useLive<DrillPrefs | undefined>((set) => subscribeDrillPrefs(uid, set), [uid], undefined)[0];
 }
 
 /** Drill sessions from the last four weeks (enough to place every schedule and measure pace), live. */
 export function useRecentSessions(uid: string) {
   const [since] = useState(() => Date.now() - 29 * DAY_MS);
-  const [sessions, setSessions] = useState<DrillSessionLog[] | undefined>();
-  useEffect(() => subscribeRecentSessions(uid, since, setSessions), [uid, since]);
-  return sessions;
+  return useLive<DrillSessionLog[] | undefined>((set) => subscribeRecentSessions(uid, since, set), [uid, since], undefined)[0];
 }
 
 /** Claude's excerpt suggestions for an episode, live: undefined while loading, null if there are none. */
 export function useExcerptSuggestions(uid: string, episodeId: string) {
-  const [suggestions, setSuggestions] = useState<ExcerptSuggestions | null | undefined>();
-  useEffect(() => subscribeExcerptSuggestions(uid, episodeId, setSuggestions), [uid, episodeId]);
-  return suggestions;
+  return useLive<ExcerptSuggestions | null | undefined>((set) => subscribeExcerptSuggestions(uid, episodeId, set), [uid, episodeId], undefined)[0];
 }
 
 /** The current time, updated every `ms`, for displays that depend on it. */

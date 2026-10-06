@@ -7,7 +7,7 @@ import { learningDrill } from "../lib/drill/plan";
 import { prefetchDrillEnglish } from "../lib/drill/prefetch";
 import { drillVoice } from "../lib/drill/prepare";
 import { isDue } from "../lib/drill/srs";
-import { drillScheduleKey, logScheduleKey, scheduleLabel } from "../lib/drill/schedules";
+import { drillScheduleKey, scheduleLabel } from "../lib/drill/schedules";
 import type { Drill, DrillPrefs, DrillSchedule, DrillSessionLog } from "../types";
 import { Info } from "./Info";
 import { PassageMap } from "./PassageMap";
@@ -30,7 +30,7 @@ function buildRows(prefs: DrillPrefs, drills: Drill[], sessions: DrillSessionLog
     .map((key) => {
       const schedule = prefs.schedules[key];
       const mine = drills.filter((d) => drillScheduleKey(d, prefs) === key);
-      const counted = sessions.filter((s) => logScheduleKey(s, prefs) === key && s.progress > 0);
+      const counted = sessions.filter((s) => drillScheduleKey(s, prefs) === key && s.progress > 0);
       return {
         key,
         label: scheduleLabel(key, schedule),

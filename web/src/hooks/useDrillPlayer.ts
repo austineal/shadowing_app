@@ -3,13 +3,13 @@ import { createGraph, outputOf, schedule, startOutput, type Graph } from "../lib
 import type { Current, DrillSession } from "../lib/drill/session";
 import { ANNOUNCE, ANNOUNCE_CHIME_SEC, type Play } from "../lib/drill/steps";
 
-export type DrillPlayerState = "idle" | "playing" | "paused" | "finished";
+type DrillPlayerState = "idle" | "playing" | "paused" | "finished";
 
 /** A press the player confirmed, for the screen to show: Missed (with the phrases marked) or Skip. `id` counts presses. */
-export type PlayerAction = { id: number } & ({ kind: "missed"; text: string; late: boolean } | { kind: "skip" });
+type PlayerAction = { id: number } & ({ kind: "missed"; text: string; late: boolean } | { kind: "skip" });
 
 /** Time the session has spent playing: earlier stretches, plus the current one if it's playing. */
-export interface PlayClock {
+interface PlayClock {
   playedMs: number;
   /** When the current stretch of playing began; absent while paused. */
   since?: number;

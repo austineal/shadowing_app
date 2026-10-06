@@ -1,17 +1,13 @@
-import { useEffect, useState } from "react";
 import { subscribeFolders, subscribeSubscriptions } from "../lib/library";
 import type { Folder, Subscription } from "../types";
+import { useLive } from "./useLive";
 
 export function useFolders(uid: string) {
-  const [folders, setFolders] = useState<Folder[] | undefined>();
-  const [error, setError] = useState<string>();
-  useEffect(() => subscribeFolders(uid, setFolders, (e) => setError(e.message)), [uid]);
+  const [folders, error] = useLive<Folder[] | undefined>((set, err) => subscribeFolders(uid, set, err), [uid], undefined);
   return { folders, error };
 }
 
 export function useSubscriptions(uid: string) {
-  const [subscriptions, setSubscriptions] = useState<Subscription[] | undefined>();
-  const [error, setError] = useState<string>();
-  useEffect(() => subscribeSubscriptions(uid, setSubscriptions, (e) => setError(e.message)), [uid]);
+  const [subscriptions, error] = useLive<Subscription[] | undefined>((set, err) => subscribeSubscriptions(uid, set, err), [uid], undefined);
   return { subscriptions, error };
 }

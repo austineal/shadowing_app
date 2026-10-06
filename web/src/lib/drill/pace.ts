@@ -17,14 +17,14 @@ const WINDOW_DAYS = 28;
 /** A measured pace is used once the logs go back this far. */
 const MIN_HISTORY_DAYS = 14;
 
-export interface Pace {
+interface Pace {
   /** Seconds of new audio learned per week. */
   perWeek: number;
   /** Measured from sessions, rather than estimated from the schedule. */
   measured: boolean;
 }
 
-export function sessionsPerWeek(s: DrillSchedule): number {
+function sessionsPerWeek(s: DrillSchedule): number {
   return s.everyDays <= 1 ? 7 * Math.max(1, Math.round(s.perDay)) : 7 / Math.round(s.everyDays);
 }
 

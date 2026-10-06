@@ -63,7 +63,7 @@ export interface LearnBlock extends BlockBase {
 
 export type Block = ReviewBlock | LearnBlock;
 
-export interface Unit {
+interface Unit {
   kind: "announce" | "lead-in" | "learn" | "test" | "fixup" | "listen" | "shadow";
   steps: Step[];
   /** Tests: the phrases tested (indices into the block's phrases), whether the result counts, and which retry this is. */
@@ -137,7 +137,7 @@ function leadInUnit(block: Block): Unit | undefined {
 }
 
 /** Learning phrase k: meaning, listen and repeat, a first try from the English, then joined to the phrase before. */
-export function learnGroupUnits(block: LearnBlock, k: number, opts: DrillOptions): Unit[] {
+function learnGroupUnits(block: LearnBlock, k: number, opts: DrillOptions): Unit[] {
   const p = block.phrases[k];
   const units: Unit[] = [{ kind: "learn", steps: learnSteps(block.episodeId, p, opts) }];
   if (canCue(p)) units.push(testUnit(block, [k], false, opts));
@@ -161,7 +161,7 @@ const testOrder = (block: Block) => block.order ?? block.phrases.map((_, i) => i
  * Finishing a passage: every phrase from its English, in order, then the whole passage to shadow.
  * Finishing a set of cards: each card from its English again, shuffled.
  */
-export function wrapUpUnits(block: LearnBlock, opts: DrillOptions): Unit[] {
+function wrapUpUnits(block: LearnBlock, opts: DrillOptions): Unit[] {
   const tests = testOrder(block).flatMap((i) => (canCue(block.phrases[i]) ? [testUnit(block, [i], false, opts)] : []));
   if (block.cards) return tests.length > 1 ? [announceUnit(ANNOUNCE.cardsAgain), ...tests] : [];
   return [...(tests.length ? [announceUnit(ANNOUNCE.wrapUp), ...tests] : []), ...shadowUnits(block)];

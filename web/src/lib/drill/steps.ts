@@ -255,7 +255,7 @@ export function englishSeconds(text: string): number {
   return 0.4 + text.length / 14;
 }
 
-export function stepSeconds(step: Step, opts: DrillOptions): number {
+function stepSeconds(step: Step, opts: DrillOptions): number {
   const p = step.play;
   if (p.kind === "silence") return p.sec;
   if (p.kind === "english") return englishSeconds(p.text);

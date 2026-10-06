@@ -11,8 +11,8 @@ import { app } from "../firebase";
  *   cannot reach the network.
  */
 
-export const AUDIO_CACHE = "audio-files";
-export const DATA_CACHE = "episode-data";
+const AUDIO_CACHE = "audio-files";
+const DATA_CACHE = "episode-data";
 
 export function cacheSupported(): boolean {
   return typeof caches !== "undefined" && typeof Response !== "undefined";

@@ -23,7 +23,7 @@ interface VoiceConfig {
 export type ProgressFn = (loaded: number, total: number) => void;
 
 /** e.g. en_GB-alba-medium -> en/en_GB/alba/medium/en_GB-alba-medium */
-export function voicePath(voiceId: string): string {
+function voicePath(voiceId: string): string {
   const [locale, name, quality] = voiceId.split("-");
   return `${locale.split("_")[0]}/${locale}/${name}/${quality}/${voiceId}`;
 }

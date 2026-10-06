@@ -17,7 +17,7 @@ describe("gapSeconds", () => {
 
 describe("stepsAfterSource", () => {
   const pause = { kind: "pause", sec: PAUSE_BEFORE_ENGLISH_SEC };
-  const clip = { kind: "clip", clip: "en" };
+  const clip = { kind: "clip" };
   const gap = { kind: "gap" };
   it("has no steps in manual mode", () => {
     expect(stepsAfterSource(s({ mode: "manual" }), 1)).toEqual([]);

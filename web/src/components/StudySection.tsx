@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { disableStudy, prepareStudy, setStudyLevel, subscribeStudyLevels } from "../lib/study";
+import { useState } from "react";
+import { useStudyLevels } from "../hooks/useLive";
+import { disableStudy, prepareStudy, setStudyLevel } from "../lib/study";
 import { ENGLISH_VOICES, loadVoice, synthesize } from "../lib/tts/client";
 import { languageLabel } from "../lib/languages";
 import type { Study } from "../hooks/useStudy";
@@ -18,10 +19,9 @@ export function StudySection(props: {
   onChange: (patch: Partial<PracticeSettings>) => void;
 }) {
   const { uid, episode, language, study, settings } = props;
-  const [levels, setLevels] = useState<Record<string, CefrLevel>>({});
+  const levels = useStudyLevels(uid);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  useEffect(() => subscribeStudyLevels(uid, setLevels), [uid]);
 
   if (language === "auto") {
     return <p className="small muted">Study mode needs the episode's language. Set it and re-transcribe first.</p>;

@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useStudyLevels } from "../hooks/useLive";
 import { languageLabel } from "../lib/languages";
-import { prepareStudy, setStudyLevel, subscribeStudyLevels } from "../lib/study";
+import { prepareStudy, setStudyLevel } from "../lib/study";
 import { CEFR_LEVELS, type CefrLevel, type Episode } from "../types";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -11,8 +12,7 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
  */
 export function DrillNeedsStudy(props: { uid: string; episode: Episode; language: string; onClose: () => void }) {
   const { uid, episode, language } = props;
-  const [levels, setLevels] = useState<Record<string, CefrLevel>>({});
-  useEffect(() => subscribeStudyLevels(uid, setLevels), [uid]);
+  const levels = useStudyLevels(uid);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const level = levels[language];

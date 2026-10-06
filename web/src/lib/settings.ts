@@ -33,7 +33,7 @@ export function saveDefaultSettings(s: PracticeSettings): void {
 
 const FEEDS_KEY = "shadowing.recentFeeds";
 
-export interface RecentFeed {
+interface RecentFeed {
   url: string;
   title: string;
 }

@@ -17,14 +17,9 @@ export function scheduleLabel(key: string, schedule: DrillSchedule | undefined):
   return schedule?.name ? `${language} · ${schedule.name}` : language;
 }
 
-/** The schedule a drill is on: its own if that still exists, else its language's main one. */
-export function drillScheduleKey(drill: Pick<Drill, "language" | "schedule">, prefs: DrillPrefs | undefined): string {
+/** The schedule a drill (or session log) is on: its own if that still exists, else its language's main one. */
+export function drillScheduleKey(drill: Pick<Drill | DrillSessionLog, "language" | "schedule">, prefs: DrillPrefs | undefined): string {
   return drill.schedule && prefs?.schedules[drill.schedule] ? drill.schedule : drill.language;
-}
-
-/** The schedule a session was of (see drillScheduleKey). */
-export function logScheduleKey(log: Pick<DrillSessionLog, "language" | "schedule">, prefs: DrillPrefs | undefined): string {
-  return log.schedule && prefs?.schedules[log.schedule] ? log.schedule : log.language;
 }
 
 /** The keys of a language's schedules, the main one first and the others in the order they were added. */

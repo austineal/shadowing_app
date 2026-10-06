@@ -70,7 +70,7 @@ const episodeRef = (uid: string, episodeId: string) => db.doc(`users/${uid}/epis
 
 async function getAll(refs: DocumentReference[]) {
   const out = [];
-  for (let i = 0; i < refs.length; i += 300) out.push(...(await db.getAll(...refs.slice(i, i + 300))));
+  for (const c of chunk(refs, 300)) out.push(...(await db.getAll(...c)));
   return out;
 }
 

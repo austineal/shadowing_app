@@ -5,20 +5,20 @@
  * its size; clips unused for KEEP_DAYS are deleted, and so are the least recently used ones when
  * the store outgrows MAX_BYTES. A clip that's needed again is simply made again.
  */
-import { synthesize } from "./client";
+import { DAY_MS } from "../drill/srs";
+import { synthesize, toAudioBuffer } from "./client";
 
-export const CLIP_CACHE = "tts-clips";
+const CLIP_CACHE = "tts-clips";
 const INDEX_KEY = "shadowing.ttsClips";
 const PRUNED_KEY = "shadowing.ttsClipsPruned";
 /** Clips not used for this long are deleted. */
-export const KEEP_DAYS = 60;
+const KEEP_DAYS = 60;
 /** Past this size, the least recently used clips go until the store is down to TARGET_BYTES. */
-export const MAX_BYTES = 150 * 1024 * 1024;
+const MAX_BYTES = 150 * 1024 * 1024;
 const TARGET_BYTES = 120 * 1024 * 1024;
-const DAY_MS = 86_400_000;
 
 /** Last day of use (days since 1970) and size in bytes, by cache path. */
-export type ClipIndex = Record<string, { used: number; bytes: number }>;
+type ClipIndex = Record<string, { used: number; bytes: number }>;
 
 export function toInt16(pcm: Float32Array): Int16Array {
   const out = new Int16Array(pcm.length);
@@ -120,20 +120,14 @@ async function store(path: string, buf: AudioBuffer): Promise<void> {
 }
 
 /** A stored clip, or undefined if there isn't one. */
-export async function storedClip(voiceId: string, text: string): Promise<AudioBuffer | undefined> {
+async function storedClip(voiceId: string, text: string): Promise<AudioBuffer | undefined> {
   if (!supported()) return undefined;
   const path = await pathFor(voiceId, text);
   const res = await (await caches.open(CLIP_CACHE)).match(path);
   if (!res) return undefined;
   const pcm = toFloat32(new Int16Array(await res.arrayBuffer()));
-  const buf = new AudioBuffer({
-    length: Math.max(1, pcm.length),
-    sampleRate: Number(res.headers.get("X-Sample-Rate")) || 22050,
-    numberOfChannels: 1,
-  });
-  buf.copyToChannel(pcm as Float32Array<ArrayBuffer>, 0);
   touch(path, pcm.length * 2);
-  return buf;
+  return toAudioBuffer(pcm, Number(res.headers.get("X-Sample-Rate")) || 22050);
 }
 
 /** The English clip for a text: stored on this device, or synthesised now and stored. */

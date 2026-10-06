@@ -1,6 +1,6 @@
 /** Minimal client for the ElevenLabs speech-to-text ("Scribe") endpoint. */
 
-export interface ScribeWord {
+interface ScribeWord {
   text: string;
   start: number;
   end: number;
@@ -9,14 +9,14 @@ export interface ScribeWord {
   logprob?: number;
 }
 
-export interface ScribeResult {
+interface ScribeResult {
   language_code: string;
   language_probability: number;
   text: string;
   words: ScribeWord[];
 }
 
-export interface TranscribeOptions {
+interface TranscribeOptions {
   apiKey: string;
   modelId: string;
   audio: Buffer;

@@ -11,7 +11,7 @@ import type { Drill, DrillPrefs, DrillSchedule } from "../../types";
 import { sessionDays } from "./forecast";
 import { DEFAULT_SCHEDULE } from "./labels";
 import { phrasesIn } from "./passages";
-import { drillScheduleKey, logScheduleKey, scheduleLanguage } from "./schedules";
+import { drillScheduleKey, scheduleLanguage } from "./schedules";
 import { CARD_BATCH, frontier, planSession, type PlanDrill, type SessionPlan } from "./plan";
 import { sessionEnglish, type Block } from "./session";
 import { DAY_MS, isDue } from "./srs";
@@ -48,7 +48,7 @@ export function scheduleOptions(schedule: DrillSchedule): DrillOptions {
   return drillOptions(schedule.learning, loadDefaultSettings(), schedule.answerTime ?? 0);
 }
 
-export interface PrepareOptions {
+interface PrepareOptions {
   /** Also resolve the episodes' audio URLs (default true). */
   withAudio?: boolean;
   /** Start new passages even if their reviews won't fit in the coming week (see planSession). */
@@ -101,7 +101,7 @@ export async function prepareSession(uid: string, key: string, now: number, opti
     })),
   }));
   // The schedule's sessions after this one, which a new passage's reviews have to fit in.
-  const counted = recent.filter((l) => logScheduleKey(l, prefs) === key && l.progress > 0);
+  const counted = recent.filter((l) => drillScheduleKey(l, prefs) === key && l.progress > 0);
   const later = learnAnyway ? undefined : sessionDays(schedule, [...counted, { startedAt: now, endedAt: now }], now, 9);
   const plan = planSession({
     now,

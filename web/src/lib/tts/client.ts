@@ -81,10 +81,14 @@ export async function isVoiceStored(voiceId: string): Promise<boolean> {
   return (await cache.match(voiceModelUrl(voiceId))) !== undefined;
 }
 
-export async function synthesize(voiceId: string, text: string): Promise<AudioBuffer> {
-  const r = await send({ type: "synth", voiceId, text });
-  const pcm = r.pcm!;
-  const buf = new AudioBuffer({ length: Math.max(1, pcm.length), sampleRate: r.sampleRate!, numberOfChannels: 1 });
+/** A mono AudioBuffer holding the samples. */
+export function toAudioBuffer(pcm: Float32Array, sampleRate: number): AudioBuffer {
+  const buf = new AudioBuffer({ length: Math.max(1, pcm.length), sampleRate, numberOfChannels: 1 });
   buf.copyToChannel(pcm as Float32Array<ArrayBuffer>, 0);
   return buf;
+}
+
+export async function synthesize(voiceId: string, text: string): Promise<AudioBuffer> {
+  const r = await send({ type: "synth", voiceId, text });
+  return toAudioBuffer(r.pcm!, r.sampleRate!);
 }

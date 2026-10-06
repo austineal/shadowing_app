@@ -37,7 +37,7 @@ export interface LoadDay extends SessionDay {
 }
 
 /** Sessions a day for a language drilled daily; 1 for one drilled every few days. */
-export function sessionsPerDay(schedule: DrillSchedule): number {
+function sessionsPerDay(schedule: DrillSchedule): number {
   return schedule.everyDays <= 1 ? Math.min(3, Math.max(1, Math.round(schedule.perDay))) : 1;
 }
 

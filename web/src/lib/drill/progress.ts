@@ -7,10 +7,10 @@ import { frontier } from "./plan";
 import { isDue, isLearned } from "./srs";
 
 /** A passage's stage: not started, partly learned, then by level once learned. */
-export type PassageStage = "new" | "learning" | "fresh" | "growing" | "solid";
+type PassageStage = "new" | "learning" | "fresh" | "growing" | "solid";
 
 /** From this level a passage counts as solid: it was still there after a week away. */
-export const SOLID_LEVEL = 4;
+const SOLID_LEVEL = 4;
 
 export function passageStage(drill: Drill, i: number): PassageStage {
   const level = drill.passages[i].level;

@@ -5,7 +5,7 @@ interface Timed {
   end: number;
 }
 
-export interface PassageOptions {
+interface PassageOptions {
   /** Preferred passage length. */
   targetSec: number;
   /** Shorter passages are penalised more steeply. */
@@ -15,7 +15,7 @@ export interface PassageOptions {
 }
 
 /** Long enough to be worth reviewing on its own, short enough to learn in one sitting. */
-export const PASSAGE_OPTIONS: PassageOptions = { targetSec: 40, minSec: 25, maxSec: 60 };
+const PASSAGE_OPTIONS: PassageOptions = { targetSec: 40, minSec: 25, maxSec: 60 };
 
 const mid = (p: Timed) => (p.start + p.end) / 2;
 
