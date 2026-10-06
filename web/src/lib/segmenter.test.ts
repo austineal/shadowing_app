@@ -47,6 +47,14 @@ describe("segmentTokens", () => {
     expect(segs.length).toBe(1);
   });
 
+  it("keeps mid-sentence pauses inside the phrase and short sentences with their own sentence", () => {
+    // "シンプルです。基礎が … まだわかっていないからです。" with a long pause after 基礎が.
+    const w = (text: string, start: number, end: number): TimedToken => ({ text, start, end, type: "word" });
+    const tokens = [w("うん。", 0, 0.5), w("シンプルです。", 1, 2), w("基礎が", 2.2, 3), w("まだわかっていないからです。", 4.5, 7)];
+    const segs = segmentTokens(tokens, { maxPhraseSec: 8, minPhraseSec: 1.2 });
+    expect(segs.map((s) => s.text)).toEqual(["うん。シンプルです。", "基礎がまだわかっていないからです。"]);
+  });
+
   it("handles Japanese without spaces", () => {
     const ja = "今日は天気がいいですね。散歩に行きましょう。それから、カフェでコーヒーを飲みましょう。";
     const segs = segmentTokens(fakeWords(ja, true), { maxPhraseSec: 4, minPhraseSec: 1 });
