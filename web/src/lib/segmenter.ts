@@ -3,8 +3,6 @@ import type { Segment, TimedToken } from "../types";
 interface SegmentOptions {
   maxPhraseSec: number;
   minPhraseSec: number;
-  /** A silence at least this long always ends a phrase. */
-  hardGapSec?: number;
 }
 
 /** Sentence-final punctuation (Latin, CJK), optionally followed by closing quotes/brackets. */
@@ -25,13 +23,14 @@ function newSegmentId(): string {
 
 /**
  * Turns timed tokens into practice phrases.
- * 1. Break at sentence-final punctuation and long silences.
+ * 1. Break at sentence-final punctuation. Pauses alone never break a sentence
+ *    that fits: speakers pause mid-clause, and the halves are hard to study.
  * 2. Recursively split anything longer than maxPhraseSec at the best clause
  *    boundary / pause near the middle.
- * 3. Merge phrases shorter than minPhraseSec into a neighbour when that fits.
+ * 3. Merge phrases shorter than minPhraseSec into a neighbour when that fits:
+ *    a sentence tail into the phrase before it, anything else into the one after.
  */
 export function segmentTokens(tokens: TimedToken[], opts: SegmentOptions): Segment[] {
-  const hardGap = opts.hardGapSec ?? 1.0;
   const words: IndexedWord[] = [];
   tokens.forEach((t, i) => {
     if (t.type === "word" && t.text.trim()) words.push({ ...t, i });
@@ -45,7 +44,7 @@ export function segmentTokens(tokens: TimedToken[], opts: SegmentOptions): Segme
     cur.push(k);
     const w = words[k];
     const next = words[k + 1];
-    const endsHere = !next || SENTENCE_END.test(w.text) || next.start - w.end >= hardGap;
+    const endsHere = !next || SENTENCE_END.test(w.text);
     if (endsHere) {
       sentences.push(cur);
       cur = [];
@@ -91,19 +90,20 @@ export function segmentTokens(tokens: TimedToken[], opts: SegmentOptions): Segme
   for (const s of sentences) splitLong(s);
 
   // Step 3: merge short.
-  const merged: number[][] = [];
-  for (const r of ranges) {
-    const prev = merged[merged.length - 1];
-    if (prev && duration(prev) < opts.minPhraseSec && duration([...prev, ...r]) <= opts.maxPhraseSec) {
-      merged[merged.length - 1] = [...prev, ...r];
-    } else {
-      merged.push(r);
-    }
-  }
+  const merged = ranges;
+  const fits = (a: number[], b: number[]) => duration([...a, ...b]) <= opts.maxPhraseSec;
   for (let k = 0; k < merged.length; k++) {
     const r = merged[k];
+    if (duration(r) >= opts.minPhraseSec) continue;
+    const prev = merged[k - 1];
     const next = merged[k + 1];
-    if (next && duration(r) < opts.minPhraseSec && duration([...r, ...next]) <= opts.maxPhraseSec) {
+    const canPrev = prev && fits(prev, r);
+    const canNext = next && fits(r, next);
+    const tail = SENTENCE_END.test(words[r[r.length - 1]].text);
+    if (canPrev && (tail || !canNext)) {
+      merged.splice(k - 1, 2, [...prev, ...r]);
+      k -= 2;
+    } else if (canNext) {
       merged.splice(k, 2, [...r, ...next]);
       k--;
     }

@@ -337,7 +337,7 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
   };
 
   const onRegenerate = async (maxPhraseSec: number) => {
-    if (!confirm("Rebuild all phrases with the new maximum length? Manual splits and merges will be lost.")) return;
+    if (!confirm("Rebuild all phrases? Manual splits and merges will be lost.")) return;
     setBusy("regen");
     try {
       const t = await ensureTokens();
@@ -754,7 +754,7 @@ function SettingsSheet(props: {
               <div className="row" style={{ marginTop: 6 }}>
                 <button
                   className="btn small"
-                  disabled={props.busy !== undefined || maxPhrase === props.segDoc.maxPhraseSec}
+                  disabled={props.busy !== undefined}
                   onClick={() => {
                     onChange({ ...settings, maxPhraseSec: maxPhrase });
                     props.onRegenerate(maxPhrase);
