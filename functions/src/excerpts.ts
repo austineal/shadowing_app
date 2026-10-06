@@ -2,12 +2,11 @@
  * Claude's part in drills: splitting an episode into self-contained sections worth drilling, and
  * splitting a chosen excerpt into titled passages.
  */
-import Anthropic from "@anthropic-ai/sdk";
-import { CEFR_LEVELS, type CefrLevel } from "./claude.js";
+import { CEFR_LEVELS, ask, type CefrLevel } from "./claude.js";
 
-export const SPEAKING = ["good", "fair", "skip"] as const;
+const SPEAKING = ["good", "fair", "skip"] as const;
 
-export interface Section {
+interface Section {
   /** First and last transcript line (inclusive). */
   first: number;
   last: number;
@@ -20,7 +19,7 @@ export interface Section {
   level: CefrLevel;
 }
 
-export interface PlannedPassages {
+interface PlannedPassages {
   /** Title for the whole excerpt. */
   title: string;
   /** Index (into the excerpt's lines) of each passage's first line, ascending from 0, with its title. */
@@ -82,41 +81,7 @@ export function clock(sec: number): string {
   return h ? `${h}:${String(m).padStart(2, "0")}:${r}` : `${m}:${r}`;
 }
 
-interface Call {
-  apiKey: string;
-  model: string;
-  effort: "medium" | "high";
-  schema: Record<string, unknown>;
-  system: string;
-  user: string;
-}
-
-/** One structured-output request; returns the parsed JSON. */
-async function ask<T>(c: Call): Promise<T> {
-  const client = new Anthropic({ apiKey: c.apiKey });
-  const message = await client.beta.messages
-    .stream({
-      model: c.model,
-      max_tokens: 64000,
-      // Re-run on another model if a safety classifier declines, instead of failing.
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-      output_config: { effort: c.effort, format: { type: "json_schema", schema: c.schema } },
-      system: c.system,
-      messages: [{ role: "user", content: c.user }],
-    })
-    .finalMessage();
-
-  if (message.stop_reason === "refusal") {
-    throw new Error(`Claude declined (${message.stop_details?.category ?? "no category"}).`);
-  }
-  if (message.stop_reason === "max_tokens") throw new Error("Claude's reply was cut off at the token limit.");
-  const text = message.content.find((b) => b.type === "text")?.text;
-  if (!text) throw new Error("Claude returned no text.");
-  return JSON.parse(text) as T;
-}
-
-export interface SectionsRequest {
+interface SectionsRequest {
   apiKey: string;
   model: string;
   languageName: string;
@@ -163,7 +128,7 @@ The episode ends at ${clock(req.durationSec)}.`;
 }
 
 /** Puts sections in order, within range and without overlaps. Gaps are left as they are. */
-export function normalizeSections(sections: Section[], lineCount: number): Section[] {
+function normalizeSections(sections: Section[], lineCount: number): Section[] {
   const out: Section[] = [];
   let next = 0;
   for (const s of [...sections].sort((a, b) => a.first - b.first)) {
@@ -176,7 +141,7 @@ export function normalizeSections(sections: Section[], lineCount: number): Secti
   return out;
 }
 
-export interface PassagesRequest {
+interface PassagesRequest {
   apiKey: string;
   model: string;
   languageName: string;

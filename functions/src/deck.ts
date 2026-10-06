@@ -16,7 +16,7 @@ import { db, bucket } from "./admin.js";
 import { REGION } from "./config.js";
 import { assertAllowed } from "./auth.js";
 import { startDeckStudy } from "./study.js";
-import { RATE, decode, encode } from "./deckAudio.js";
+import { RATE, decode, encode } from "./audio.js";
 
 
 /** One card in the manifest the client uploads (deck.json); clip paths are relative to the episode's folder. */

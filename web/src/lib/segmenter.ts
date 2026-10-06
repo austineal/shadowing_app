@@ -1,6 +1,6 @@
 import type { Segment, TimedToken } from "../types";
 
-export interface SegmentOptions {
+interface SegmentOptions {
   maxPhraseSec: number;
   minPhraseSec: number;
   /** A silence at least this long always ends a phrase. */
@@ -18,7 +18,7 @@ interface IndexedWord extends TimedToken {
 }
 
 let idCounter = 0;
-export function newSegmentId(): string {
+function newSegmentId(): string {
   idCounter = (idCounter + 1) % 1_000_000;
   return `${Date.now().toString(36)}${idCounter.toString(36)}`;
 }
@@ -113,7 +113,7 @@ export function segmentTokens(tokens: TimedToken[], opts: SegmentOptions): Segme
 }
 
 /** Builds a segment spanning tokens[fromIdx..toIdx] (inclusive), keeping original spacing. */
-export function makeSegment(tokens: TimedToken[], fromIdx: number, toIdx: number): Segment {
+function makeSegment(tokens: TimedToken[], fromIdx: number, toIdx: number): Segment {
   let text = "";
   for (let i = fromIdx; i <= toIdx; i++) text += tokens[i].text;
   return {
@@ -125,7 +125,7 @@ export function makeSegment(tokens: TimedToken[], fromIdx: number, toIdx: number
 }
 
 /** Indices of word tokens whose midpoint lies within [start, end]. */
-export function wordsInRange(tokens: TimedToken[], start: number, end: number): number[] {
+function wordsInRange(tokens: TimedToken[], start: number, end: number): number[] {
   const out: number[] = [];
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];

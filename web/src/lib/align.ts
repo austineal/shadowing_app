@@ -22,7 +22,7 @@ interface AsrToken {
   end: number;
 }
 
-export interface AlignmentResult {
+interface AlignmentResult {
   tokens: TimedToken[];
   /** Fraction of transcript tokens directly matched to recognised speech. */
   matchRatio: number;

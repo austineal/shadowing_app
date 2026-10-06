@@ -5,13 +5,13 @@
 import type { DrillPassage } from "../../types";
 
 /** Days until the next review, by level. Level 0 (just learned, or failed from level 1) means the next session. */
-export const INTERVAL_DAYS = [0, 1, 3, 7, 15, 30, 60, 120, 240];
+const INTERVAL_DAYS = [0, 1, 3, 7, 15, 30, 60, 120, 240];
 export const MAX_LEVEL = INTERVAL_DAYS.length - 1;
 
 const HOUR_MS = 3_600_000;
 export const DAY_MS = 24 * HOUR_MS;
 /** Review days start at 4am, so a late-night session still counts for that day. */
-export const DAY_START_HOUR = 4;
+const DAY_START_HOUR = 4;
 /** "The next session": any session starting at least this long after the passage was learned or failed. */
 export const NEXT_SESSION_MS = HOUR_MS;
 

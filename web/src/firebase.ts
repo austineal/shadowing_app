@@ -19,7 +19,7 @@ const firebaseConfig = {
   messagingSenderId: "265798863216",
 };
 
-export const FUNCTIONS_REGION = "europe-west2";
+const FUNCTIONS_REGION = "europe-west2";
 
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);

@@ -127,7 +127,7 @@ export function buildLibraryTree(episodes: Episode[], folders: Folder[]): Librar
 }
 
 /** Lower case, without accents or width variants, so "teheran" finds "Téhéran". */
-export function searchKey(text: string): string {
+function searchKey(text: string): string {
   return text.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
 }
 

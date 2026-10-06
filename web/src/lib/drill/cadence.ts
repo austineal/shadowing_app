@@ -23,7 +23,7 @@ export interface Availability {
 }
 
 /** Minimum time between sessions of a language drilled several times a day. */
-export function hoursBetweenSessions(perDay: number): number {
+function hoursBetweenSessions(perDay: number): number {
   return perDay >= 3 ? 3 : 5;
 }
 

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useStudyLevels } from "../hooks/useLive";
 import { Link } from "react-router-dom";
 import { Info } from "../components/Info";
 import { PassageMap, PassageMapKey } from "../components/PassageMap";
@@ -10,12 +11,12 @@ import { DEFAULT_SCHEDULE, FREQUENCIES, SESSION_MINUTES, frequencyOf } from "../
 import { formatProgress, progressOf } from "../lib/drill/progress";
 import { dayNumber } from "../lib/drill/srs";
 import { drillVoice } from "../lib/drill/prepare";
-import { drillScheduleKey, logScheduleKey, newScheduleKey, scheduleLabel, scheduleLanguage, schedulesOf } from "../lib/drill/schedules";
+import { drillScheduleKey, newScheduleKey, scheduleLabel, scheduleLanguage, schedulesOf } from "../lib/drill/schedules";
 import { deleteDrill, setDrillSchedule, setDrillVoice, setSchedule } from "../lib/drill/store";
 import { formatBytes, formatTime } from "../lib/format";
 import { languageLabel } from "../lib/languages";
 import { episodeLanguage } from "../lib/organise";
-import { setStudyLevel, subscribeStudyLevels } from "../lib/study";
+import { setStudyLevel } from "../lib/study";
 import { ENGLISH_VOICES, isVoiceStored, loadVoice } from "../lib/tts/client";
 import { clearClips, storedClipBytes } from "../lib/tts/clipCache";
 import { CEFR_LEVELS, type CefrLevel, type Drill, type DrillPrefs, type DrillSchedule, type DrillSessionLog } from "../types";
@@ -33,8 +34,7 @@ export default function DrillSettings({ uid }: { uid: string }) {
   const prefs = useDrillPrefs(uid);
   const drills = useDrills(uid);
   const sessions = useRecentSessions(uid);
-  const [levels, setLevels] = useState<Record<string, CefrLevel>>({});
-  useEffect(() => subscribeStudyLevels(uid, setLevels), [uid]);
+  const levels = useStudyLevels(uid);
 
   const languages = useMemo(() => {
     const set = new Set<string>();
@@ -118,7 +118,7 @@ function LanguageCard(props: {
   const save = (key: string, next: DrillSchedule | null) => void setSchedule(uid, key, next).catch((e) => setError(String(e)));
   const on = (key: string) => ({
     drills: props.drills.filter((d) => drillScheduleKey(d, prefs) === key),
-    sessions: props.sessions.filter((s) => logScheduleKey(s, prefs) === key),
+    sessions: props.sessions.filter((s) => drillScheduleKey(s, prefs) === key),
   });
 
   const addSchedule = () => {

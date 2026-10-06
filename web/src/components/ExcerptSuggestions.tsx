@@ -1,15 +1,16 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useStudyLevels } from "../hooks/useLive";
 import { useDrillPrefs, useExcerptSuggestions, useNow, useRecentSessions } from "../hooks/useDrills";
 import { DEFAULT_SCHEDULE, formatMinutes } from "../lib/drill/labels";
 import { excerptMinutes, formatLearningTime, weeklyPace } from "../lib/drill/pace";
-import { logScheduleKey, scheduleForEpisode } from "../lib/drill/schedules";
+import { drillScheduleKey, scheduleForEpisode } from "../lib/drill/schedules";
 import { phraseSpan } from "../lib/drill/passages";
 import { drillOptions } from "../lib/drill/steps";
 import { suggestExcerpts } from "../lib/drill/store";
 import { formatTime } from "../lib/format";
 import { languageLabel } from "../lib/languages";
 import { loadDefaultSettings } from "../lib/settings";
-import { setStudyLevel, subscribeStudyLevels } from "../lib/study";
+import { setStudyLevel } from "../lib/study";
 import { CEFR_LEVELS, type CefrLevel, type Drill, type Episode, type ExcerptSection, type Segment } from "../types";
 import { Info } from "./Info";
 
@@ -50,8 +51,7 @@ export function ExcerptSuggestionsSheet(props: {
   const prefs = useDrillPrefs(uid);
   const sessions = useRecentSessions(uid);
   const now = useNow();
-  const [levels, setLevels] = useState<Record<string, CefrLevel>>({});
-  useEffect(() => subscribeStudyLevels(uid, setLevels), [uid]);
+  const levels = useStudyLevels(uid);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -60,7 +60,7 @@ export function ExcerptSuggestionsSheet(props: {
   const schedule = prefs?.schedules[key] ?? DEFAULT_SCHEDULE;
   const pace = weeklyPace(
     schedule,
-    (sessions ?? []).filter((l) => logScheduleKey(l, prefs) === key),
+    (sessions ?? []).filter((l) => drillScheduleKey(l, prefs) === key),
     drillOptions(schedule.learning, loadDefaultSettings(), schedule.answerTime ?? 0),
     now,
   );

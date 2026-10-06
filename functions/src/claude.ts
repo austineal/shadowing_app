@@ -4,11 +4,11 @@ import Anthropic from "@anthropic-ai/sdk";
 export const CEFR_LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"] as const;
 export type CefrLevel = (typeof CEFR_LEVELS)[number];
 
-export function isBelow(a: CefrLevel, b: CefrLevel): boolean {
+function isBelow(a: CefrLevel, b: CefrLevel): boolean {
   return CEFR_LEVELS.indexOf(a) < CEFR_LEVELS.indexOf(b);
 }
 
-export const NOTE_KINDS = ["grammar", "idiom", "vocab", "culture", "pronunciation", "transcription"] as const;
+const NOTE_KINDS = ["grammar", "idiom", "vocab", "culture", "pronunciation", "transcription"] as const;
 
 export interface StudyNote {
   kind: (typeof NOTE_KINDS)[number];
@@ -116,39 +116,58 @@ export interface StudyRequest {
   known: KnownPoint[];
 }
 
-/** Returns study material for each phrase, in the order given. */
-export async function studyPhrases(req: StudyRequest): Promise<PhraseStudy[]> {
-  const client = new Anthropic({ apiKey: req.apiKey });
-  const ids = req.phrases.map((_, i) => `p${i + 1}`);
-  const list = req.phrases.map((p, i) => `${ids[i]}: ${p}`).join("\n");
+interface Call {
+  apiKey: string;
+  model: string;
+  effort: "medium" | "high";
+  schema: Record<string, unknown>;
+  system: string | Anthropic.Beta.BetaTextBlockParam[];
+  user: string;
+}
 
+/** One structured-output request; returns the parsed JSON. */
+export async function ask<T>(c: Call): Promise<T> {
+  const client = new Anthropic({ apiKey: c.apiKey });
   const message = await client.beta.messages
     .stream({
-      model: req.model,
-      max_tokens: 32000,
-      // Re-run on another model if a safety classifier declines, instead of failing the batch.
+      model: c.model,
+      max_tokens: 64000,
+      // Re-run on another model if a safety classifier declines, instead of failing.
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
-      output_config: { effort: "medium", format: { type: "json_schema", schema: SCHEMA } },
-      system: [
-        { type: "text", text: instructions(req.languageName) },
-        { type: "text", text: `${req.transcript}\n</transcript>`, cache_control: { type: "ephemeral" } },
-        // After the cache breakpoint, so marking a point known doesn't invalidate the transcript.
-        ...(req.known.length > 0 ? [{ type: "text" as const, text: knownBlock(req.known) }] : []),
-      ],
-      messages: [{ role: "user", content: `Learner level: ${req.level}\n\nPhrases:\n${list}` }],
+      output_config: { effort: c.effort, format: { type: "json_schema", schema: c.schema } },
+      system: c.system,
+      messages: [{ role: "user", content: c.user }],
     })
     .finalMessage();
 
   if (message.stop_reason === "refusal") {
-    throw new Error(`Claude declined this batch (${message.stop_details?.category ?? "no category"}).`);
+    throw new Error(`Claude declined (${message.stop_details?.category ?? "no category"}).`);
   }
-  if (message.stop_reason === "max_tokens") {
-    throw new Error("Claude's reply was cut off at the token limit.");
-  }
+  if (message.stop_reason === "max_tokens") throw new Error("Claude's reply was cut off at the token limit.");
   const text = message.content.find((b) => b.type === "text")?.text;
   if (!text) throw new Error("Claude returned no text.");
-  const parsed = JSON.parse(text) as { phrases: (PhraseStudy & { id: string })[] };
+  return JSON.parse(text) as T;
+}
+
+/** Returns study material for each phrase, in the order given. */
+export async function studyPhrases(req: StudyRequest): Promise<PhraseStudy[]> {
+  const ids = req.phrases.map((_, i) => `p${i + 1}`);
+  const list = req.phrases.map((p, i) => `${ids[i]}: ${p}`).join("\n");
+
+  const parsed = await ask<{ phrases: (PhraseStudy & { id: string })[] }>({
+    apiKey: req.apiKey,
+    model: req.model,
+    effort: "medium",
+    schema: SCHEMA,
+    system: [
+      { type: "text", text: instructions(req.languageName) },
+      { type: "text", text: `${req.transcript}\n</transcript>`, cache_control: { type: "ephemeral" } },
+      // After the cache breakpoint, so marking a point known doesn't invalidate the transcript.
+      ...(req.known.length > 0 ? [{ type: "text" as const, text: knownBlock(req.known) }] : []),
+    ],
+    user: `Learner level: ${req.level}\n\nPhrases:\n${list}`,
+  });
 
   const byId = new Map(parsed.phrases.map((p) => [p.id, p]));
   return ids.map((id, i) => {
@@ -171,7 +190,7 @@ export interface ThreadEntry {
   text: string;
 }
 
-export interface ExplainRequest {
+interface ExplainRequest {
   apiKey: string;
   model: string;
   languageName: string;

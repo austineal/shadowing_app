@@ -113,14 +113,14 @@ export function hasHeader(rows: string[][], files: Set<string>): boolean {
 
 // ---- Cards ----
 
-export interface DeckCard {
+interface DeckCard {
   audio: File;
   text: string;
   english?: string;
   englishAudio?: File;
 }
 
-export interface DeckRead {
+interface DeckRead {
   cards: DeckCard[];
   /** Rows left out, with why. */
   skipped: { row: number; why: string }[];

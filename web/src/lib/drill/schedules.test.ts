@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { drillScheduleKey, logScheduleKey, newScheduleKey, scheduleForEpisode, scheduleLabel, schedulesOf } from "./schedules";
+import { drillScheduleKey, newScheduleKey, scheduleForEpisode, scheduleLabel, schedulesOf } from "./schedules";
 import type { Drill, DrillPrefs, DrillSchedule } from "../../types";
 
 const schedule = (patch: Partial<DrillSchedule> = {}): DrillSchedule => ({
@@ -32,8 +32,8 @@ describe("schedules", () => {
     expect(drillScheduleKey(drill({}), prefs)).toBe("ja");
     expect(drillScheduleKey(drill({ schedule: "ja_a" }), prefs)).toBe("ja_a");
     expect(drillScheduleKey(drill({ schedule: "ja_gone" }), prefs)).toBe("ja");
-    expect(logScheduleKey({ language: "ja", schedule: "ja_b" }, prefs)).toBe("ja_b");
-    expect(logScheduleKey({ language: "cy" }, prefs)).toBe("cy");
+    expect(drillScheduleKey({ language: "ja", schedule: "ja_b" }, prefs)).toBe("ja_b");
+    expect(drillScheduleKey({ language: "cy" }, prefs)).toBe("cy");
   });
 
   it("labels named schedules", () => {

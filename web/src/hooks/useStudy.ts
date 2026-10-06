@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isKnownNote, visibleNotes } from "../lib/notes";
 import { phraseKey, subscribeEpisodePhrases, subscribeKnownNotes } from "../lib/study";
 import { isVoiceStored, synthesize } from "../lib/tts/client";
-import type { ClipKind } from "../lib/sequence";
 import type { Episode, KnownNote, PhraseStudy, Segment, StudyNote } from "../types";
 
 /** How many phrases ahead of the current one to prepare English audio for. */
@@ -108,12 +107,7 @@ export function useStudy(uid: string, episode: Episode, segments: Segment[], lan
     [englishClip],
   );
 
-  const getClip = useCallback(
-    (index: number, clip: ClipKind) => (clip === "en" ? englishClip(index) : undefined),
-    [englishClip],
-  );
-
-  return { enabled, phraseAt, known, shownNotes, progress, prefetch, getClip, voiceReady, refreshVoice };
+  return { enabled, phraseAt, known, shownNotes, progress, prefetch, getClip: englishClip, voiceReady, refreshVoice };
 }
 
 export type Study = ReturnType<typeof useStudy>;

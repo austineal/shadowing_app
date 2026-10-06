@@ -4,7 +4,7 @@
  * words, so transcript alignment works on characters rather than words.
  * Add more entries here as you pick up new languages.
  */
-export interface LanguageOption {
+interface LanguageOption {
   code: string;
   label: string;
   charBased?: boolean;

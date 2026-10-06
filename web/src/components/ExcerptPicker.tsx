@@ -4,7 +4,7 @@ import { DEFAULT_SCHEDULE, formatMinutes } from "../lib/drill/labels";
 import { formatLearningTime, weeklyPace } from "../lib/drill/pace";
 import { phrasesIn, splitPassages } from "../lib/drill/passages";
 import { learningSeconds } from "../lib/drill/plan";
-import { logScheduleKey, scheduleForEpisode, scheduleLabel, schedulesOf } from "../lib/drill/schedules";
+import { drillScheduleKey, scheduleForEpisode, scheduleLabel, schedulesOf } from "../lib/drill/schedules";
 import { drillOptions } from "../lib/drill/steps";
 import { createDrill, planDrillPassages, setSchedule } from "../lib/drill/store";
 import { formatTime } from "../lib/format";
@@ -88,7 +88,7 @@ export function ExcerptPicker(props: {
   );
   const pace = weeklyPace(
     schedule ?? DEFAULT_SCHEDULE,
-    (sessions ?? []).filter((l) => logScheduleKey(l, prefs) === key),
+    (sessions ?? []).filter((l) => drillScheduleKey(l, prefs) === key),
     opts,
     now,
   );

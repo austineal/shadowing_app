@@ -32,7 +32,7 @@ export function knownMatches<K extends Pick<KnownNote, "kind" | "span" | "title"
   return known.filter((k) => isKnownNote(n, [k]));
 }
 
-export interface TextPart {
+interface TextPart {
   text: string;
   /** Index into the notes array for a highlighted span. */
   note?: number;
