@@ -466,6 +466,7 @@ function EpisodeRow({ ep, place, ctx }: { ep: Episode; place?: string; ctx: Tree
         <div className="title">{ep.title}</div>
         <div className="meta">
           <StatusPill ep={ep} />
+          {ep.archived && <span className="pill">Archived</span>}
           {place ? <span>{place}</span> : null}
           {ep.kind === "deck" && ep.cardCount ? (
             <span>Deck · {ep.cardCount} cards</span>
@@ -488,7 +489,7 @@ function EpisodeRow({ ep, place, ctx }: { ep: Episode; place?: string; ctx: Tree
             setEditing(true);
           }}
           aria-label="Edit episode"
-          title="Rename, move, save offline or delete"
+          title="Rename, move, save offline, archive or delete"
         >
           ⋯
         </button>
@@ -552,6 +553,9 @@ function EpisodeEditor({
           Cancel
         </button>
         <span className="spacer" />
+        <button className="btn ghost small" onClick={() => void updateEpisode(uid, ep.id, { archived: !ep.archived }).then(onDone, (e: unknown) => setError(String(e)))}>
+          {ep.archived ? "Unarchive" : "Archive"}
+        </button>
         <button
           className="btn ghost small danger"
           onClick={() => {

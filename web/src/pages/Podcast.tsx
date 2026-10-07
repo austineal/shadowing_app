@@ -144,6 +144,7 @@ export default function Podcast({ uid }: { uid: string }) {
                   <div className="title">{fe.title}</div>
                   <div className="meta">
                     {isNew && !imported && <span className="pill ready">New</span>}
+                    {imported?.archived && <span className="pill">Archived</span>}
                     {fe.pubDate ? <span>{new Date(fe.pubDate).toLocaleDateString()}</span> : null}
                     {fe.durationSec ? <span>{formatDuration(fe.durationSec)}</span> : null}
                   </div>

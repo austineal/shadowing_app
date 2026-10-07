@@ -21,6 +21,8 @@ export interface Episode {
   feedUrl?: string | null;
   /** User folder the episode is filed in (null/absent = unfiled). */
   folderId?: string | null;
+  /** Hidden from the library tree; search and the podcast's feed still find it. */
+  archived?: boolean;
   audioPath: string;
   /** Cached Firebase download URL for the audio, saved after first lookup so offline playback needs no network. */
   audioUrl?: string;
