@@ -47,6 +47,11 @@ describe("buildLibraryTree", () => {
     const tree = buildLibraryTree([], [{ id: "old", name: "Legacy", createdAt: null }]);
     expect(shape(tree)).toEqual([["Other (0)", [], [["Legacy (0)", [], []]]]]);
   });
+
+  it("leaves archived episodes out", () => {
+    const tree = buildLibraryTree([ep("a", radioX), ep("b", { ...radioX, archived: true })], []);
+    expect(shape(tree)).toEqual([["French (1)", [], [["Radio X (1)", ["a"], []]]]]);
+  });
 });
 
 describe("searchEpisodes", () => {

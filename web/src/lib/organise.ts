@@ -72,7 +72,7 @@ function node(kind: LibraryNode["kind"], id: string, label: string, language: st
 const byLabel = (a: LibraryNode, b: LibraryNode) => a.label.localeCompare(b.label);
 
 /**
- * Places every episode exactly once. A folder the user filed it in wins; otherwise it goes
+ * Places every episode exactly once, archived ones aside. A folder the user filed it in wins; otherwise it goes
  * under its language, inside its podcast's node if it came from a feed. Folders appear under
  * their own language even when empty. Episodes keep the order they were given in.
  */
@@ -93,6 +93,7 @@ export function buildLibraryTree(episodes: Episode[], folders: Folder[]): Librar
   const shows = new Map<string, LibraryNode>();
 
   for (const ep of episodes) {
+    if (ep.archived) continue;
     const folder = ep.folderId ? folderNodes.get(ep.folderId) : undefined;
     if (folder) {
       folder.episodes.push(ep);
