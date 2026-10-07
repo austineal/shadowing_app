@@ -77,7 +77,7 @@ def build():
                 seen.add(key)
                 base = f"u{n:02d}-g{i:03d}"
                 cut(mp3(n), *c["cy_t"], f"{d}/{base}.mp3"); cut(mp3(n), *c["en_t"], f"{d}/{base}-en.mp3")
-                rows.append([f"{base}.mp3", f"{base}-en.mp3", vocab_text(c), c["en"], n])
+                rows.append([f"{base}.mp3", f"{base}-en.mp3", vocab_text(c).strip(), c["en"].strip(), n])
         write_csv(f"{d}/geirfa.csv", rows)
         d = os.path.join(A.out, f"Ymadroddion {tag}"); os.makedirs(d, exist_ok=True)
         rows = []
@@ -91,7 +91,7 @@ def build():
                 en = ""
                 if "en_t" in c:
                     en = f"{base}-en.mp3"; cut(mp3(n), *c["en_t"], f"{d}/{en}")
-                rows.append([f"{base}.mp3", en, c["cy"], c["en"], n])
+                rows.append([f"{base}.mp3", en, c["cy"].strip(), c["en"].strip(), n])
         write_csv(f"{d}/ymadroddion.csv", rows)
         # every dialogue and radio piece in order, 2 s apart, 4 s between units
         inputs, filt = [], []

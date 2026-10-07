@@ -122,7 +122,8 @@ def unit_cards(unit, mp3, words_json, vocab):
         if fi in used_f or fi == 0 or fi + 1 >= len(fs): continue
         p, n = by_f.get(key(fs[fi-1])), by_f.get(key(fs[fi+1]))
         if not p or not n or not p["en_t"][1] < n["cy_t"][0]: continue
-        free = [i for i, c in enumerate(ch) if p["en_t"][1] <= c["start"] and c["end"] <= n["cy_t"][0] and i not in used_ch]
+        heading = lambda c: max(sim(c["text"], h) for pair in HEAD.values() for h in pair) >= 0.7  # 'Berfau / verbs'
+        free = [i for i, c in enumerate(ch) if p["en_t"][1] <= c["start"] and c["end"] <= n["cy_t"][0] and i not in used_ch and not heading(c)]
         if len(free) != 2: continue
         a, b = ch[free[0]], ch[free[1]]
         used_f.add(fi); used_ch |= set(free)
