@@ -3,14 +3,16 @@ import re, sys, os, json
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from chunks import chunks
 
-EN = set("the you are is do does what where how who listen to a i don't for translate and of in your practise practice let's lets out it this that with can be on when why will have has here there these those questions answer about episode tips top used one person know well child pet formal singular plural".split())
-SGWRS = re.compile(r"\b(s?g?wrs|skurs|sgyrs|sgwr|gwrs|s?cwrs)\b", re.I)
+EN = set("the you are is do does what where how who listen to a i or child pet work well know person good morning afternoon evening night greetings don't for translate and of in your practise practice let's lets out it this that with can be on when why will have has here there these those questions answer about episode tips top used one person know well child pet formal singular plural".split())
+SGWRS = re.compile(r"\b(s?[gck]?[wu]rs|sgyrs|sgwr)\b", re.I)  # Whisper spells "sgwrs" many ways
 RADIO = re.compile(r"robin\s*radio", re.I)
-STOP = re.compile(r"beth am (y ?m)?arfer|let'?s practi|listen|gwrandewch|grandewch|robin\s*radio|help llaw|top tips|darllenwch|read the", re.I)
+STOP = re.compile(r"beth am (y ?m)?arfer|let'?s practi|listen|gwrandewch|grandewch|robin\s*radio|help llaw|^help\b|top tips|darllenwch|read the", re.I)
 
 def english(t):
     ws = re.findall(r"[a-z']+", t.lower())
-    return bool(ws) and sum(w in EN for w in ws) / len(ws) >= 0.4
+    hits = [w for w in ws if w in EN]
+    if not set(hits) - {"a", "i"}: return False  # 'a' and 'i' are Welsh words too
+    return len(hits) / len(ws) >= 0.4
 
 def spans(ch):
     out, i = [], 0

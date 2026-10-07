@@ -1,6 +1,12 @@
 """Non-silent chunks of an mp3 with the whisper words that fall in them."""
 import json, os, re, subprocess, sys
 
+def plausible(text, dur):
+    """Drops Whisper loop output ('yn yw'n yw'n yw'n ...'): too long for the chunk or one word over and over."""
+    ws = re.findall(r"\w+", text.lower())
+    if len(text) > 25 * dur + 15 or (len(ws) >= 6 and len(set(ws)) <= len(ws) / 3): return ""
+    return text
+
 def chunks(mp3, words_json, noise="-35dB", gap=0.35, fill=None):
     """fill: {start: text} for chunks the whole-file pass missed; defaults to <words_json>.fill.json if present."""
     if fill is None:
@@ -27,7 +33,7 @@ def chunks(mp3, words_json, noise="-35dB", gap=0.35, fill=None):
         owned[i].append(w)
     out = []
     for (a, b), ws in zip(speech, owned):
-        text = " ".join(w["word"].strip() for w in ws) or fill.get(str(round(a, 3)), "")
+        text = " ".join(w["word"].strip() for w in ws) or plausible(fill.get(str(round(a, 3)), ""), b - a)
         out.append({"start": round(a, 3), "end": round(b, 3), "text": text, "words": ws})
     return out
 
