@@ -36,6 +36,8 @@ describe("columns", () => {
   it("guesses without a header, by content", () => {
     const body = rows.slice(1).map((r) => [r[2], r[3], r[1], r[0]]);
     expect(hasHeader(body, files)).toBe(false);
+    expect(hasHeader([["今日は雨です。", "999.mp3"]], files)).toBe(false);
+    expect(hasHeader([["今日は雨です。", "[sound:999.mp3]"]], new Set())).toBe(false);
     expect(guessColumns(null, body, files)).toEqual({ audio: 0, englishAudio: 1, english: 2, text: 3 });
   });
 
