@@ -106,9 +106,10 @@ export function guessColumns(header: string[] | null, rows: string[][], files: S
   };
 }
 
-/** Whether the first row is a header: none of its cells name a chosen file. */
+/** Whether the first row is a header: none of its cells name a chosen file, or look like an audio file. */
 export function hasHeader(rows: string[][], files: Set<string>): boolean {
-  return rows.length > 0 && !rows[0].some((c) => files.has(fileRef(c)));
+  const isAudio = (c: string) => files.has(fileRef(c)) || /\[sound:|\.(mp3|m4a|ogg|opus|wav|flac|aac)$/i.test(c.trim());
+  return rows.length > 0 && !rows[0].some(isAudio);
 }
 
 // ---- Cards ----
