@@ -7,7 +7,7 @@ export const elevenLabsApiKey = defineSecret("ELEVENLABS_API_KEY");
 
 /** ElevenLabs speech-to-text model. */
 export const scribeModelId = defineString("SCRIBE_MODEL_ID", {
-  default: "scribe_v1",
+  default: "scribe_v2",
   description: "ElevenLabs speech-to-text model id",
 });
 
