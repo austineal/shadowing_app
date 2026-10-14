@@ -11,5 +11,7 @@ it("stores the codes older episodes already use", () => {
   expect(LANGUAGES.some((l) => l.code === "nn")).toBe(false);
   expect(languageLabel("nn")).toBe("Norwegian");
   expect(languageLabel("pol")).toBe("Polish");
+  expect(["ff", "luo", "umb"].map(languageLabel)).toEqual(["Fulah", "Luo", "Umbundu"]);
+  expect(LANGUAGES).toHaveLength(101);
   expect(isCharBased("jpn") && isCharBased("yue") && !isCharBased("fr")).toBe(true);
 });

@@ -1,25 +1,33 @@
 /**
- * Languages offered in the import UI: everything ElevenLabs Scribe transcribes
- * (https://elevenlabs.io/docs/capabilities/speech-to-text), as listed there in
- * ISO-639-3. We store and send the canonical (usually two-letter) code, which
- * is what older episodes already use. `CHAR_BASED` languages have no spaces
- * between words, so transcript alignment works on characters rather than words.
+ * Languages offered in the import UI: everything ElevenLabs Scribe transcribes,
+ * with names and ISO-639-3 codes as listed at
+ * https://elevenlabs.io/docs/capabilities/speech-to-text. We store and send the
+ * canonical (usually two-letter) code, which is what older episodes already use.
+ * Names are spelled out because browsers' Intl.DisplayNames lacks rarer ones
+ * (Fulah, Luo, Umbundu…). `CHAR_BASED` languages have no spaces between words,
+ * so transcript alignment works on characters rather than words.
  */
-const SCRIBE_CODES = (
-  "afr amh ara hye asm ast aze bel ben bos bul mya yue cat ceb nya hrv ces dan nld eng est fil fin " +
-  "fra ful glg lug kat deu ell guj hau heb hin hun isl ibo ind gle ita jpn jav kea kan kaz khm kor " +
-  "kur kir lao lav lin lit luo ltz mkd msa mal mlt zho mri mar mon nep nso nor oci ori pus fas pol " +
-  "por pan ron rus srp sna snd sin slk slv som spa swa swe tam tgk tel tha tur ukr umb urd uzb vie " +
-  "cym wol xho zul"
-).split(" ");
-
-const names = new Intl.DisplayNames(["en"], { type: "language" });
+const SCRIBE_LANGUAGES = `afr Afrikaans, amh Amharic, ara Arabic, hye Armenian, asm Assamese, ast Asturian,
+aze Azerbaijani, bel Belarusian, ben Bengali, bos Bosnian, bul Bulgarian, mya Burmese, yue Cantonese,
+cat Catalan, ceb Cebuano, nya Chichewa, hrv Croatian, ces Czech, dan Danish, nld Dutch, eng English,
+est Estonian, fil Filipino, fin Finnish, fra French, ful Fulah, glg Galician, lug Ganda, kat Georgian,
+deu German, ell Greek, guj Gujarati, hau Hausa, heb Hebrew, hin Hindi, hun Hungarian, isl Icelandic,
+ibo Igbo, ind Indonesian, gle Irish, ita Italian, jpn Japanese, jav Javanese, kea Kabuverdianu,
+kan Kannada, kaz Kazakh, khm Khmer, kor Korean, kur Kurdish, kir Kyrgyz, lao Lao, lav Latvian,
+lin Lingala, lit Lithuanian, luo Luo, ltz Luxembourgish, mkd Macedonian, msa Malay, mal Malayalam,
+mlt Maltese, zho Mandarin Chinese, mri Māori, mar Marathi, mon Mongolian, nep Nepali, nso Northern Sotho,
+nor Norwegian, oci Occitan, ori Odia, pus Pashto, fas Persian, pol Polish, por Portuguese, pan Punjabi,
+ron Romanian, rus Russian, srp Serbian, sna Shona, snd Sindhi, sin Sinhala, slk Slovak, slv Slovenian,
+som Somali, spa Spanish, swa Swahili, swe Swedish, tam Tamil, tgk Tajik, tel Telugu, tha Thai,
+tur Turkish, ukr Ukrainian, umb Umbundu, urd Urdu, uzb Uzbek, vie Vietnamese, cym Welsh, wol Wolof,
+xho Xhosa, zul Zulu`;
 
 export const LANGUAGES: { code: string; label: string }[] = [
   { code: "auto", label: "Auto-detect" },
-  ...SCRIBE_CODES.map((c) => normalizeLanguageCode(c)!)
-    .map((code) => ({ code, label: names.of(code) ?? code }))
-    .sort((a, b) => a.label.localeCompare(b.label)),
+  ...SCRIBE_LANGUAGES.split(/,\s*/).map((entry) => {
+    const [iso3, ...name] = entry.split(" ");
+    return { code: normalizeLanguageCode(iso3)!, label: name.join(" ") };
+  }),
 ];
 
 const CHAR_BASED = new Set(["ja", "zh", "yue", "th", "lo", "km", "my"]);
