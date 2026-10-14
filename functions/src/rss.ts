@@ -67,7 +67,7 @@ function assertHttpUrl(raw: unknown, field: string): URL {
 export const fetchFeed = onCall(
   { region: REGION, memory: "512MiB", timeoutSeconds: 60 },
   async (req) => {
-    assertAllowed(req);
+    await assertAllowed(req);
     const url = assertHttpUrl((req.data as { url?: unknown })?.url, "url");
 
     const res = await fetch(url, { headers: { "user-agent": USER_AGENT, accept: "application/rss+xml, application/xml, text/xml, */*" } });
@@ -173,7 +173,7 @@ async function findImported(
 export const importEpisode = onCall(
   { region: REGION, memory: "1GiB", timeoutSeconds: 540 },
   async (req) => {
-    const uid = assertAllowed(req);
+    const uid = await assertAllowed(req);
     const data = (req.data ?? {}) as Record<string, unknown>;
     const audioUrl = assertHttpUrl(data.audioUrl, "audioUrl");
     const title = typeof data.title === "string" && data.title.trim() ? data.title.trim().slice(0, 300) : "Untitled";

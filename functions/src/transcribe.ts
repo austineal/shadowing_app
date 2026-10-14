@@ -143,7 +143,7 @@ export const retranscribeEpisode = onCall(
     secrets: [elevenLabsApiKey],
   },
   async (req) => {
-    const uid = assertAllowed(req);
+    const uid = await assertAllowed(req);
     const episodeId = (req.data as { episodeId?: unknown })?.episodeId;
     if (typeof episodeId !== "string" || !episodeId) {
       throw new HttpsError("invalid-argument", "episodeId is required.");

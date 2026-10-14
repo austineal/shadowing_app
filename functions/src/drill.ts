@@ -42,7 +42,7 @@ const failure = (err: unknown) => new HttpsError("internal", err instanceof Erro
 export const suggestExcerpts = onCall(
   { region: REGION, timeoutSeconds: 540, memory: "512MiB", secrets: [anthropicApiKey] },
   async (req) => {
-    const uid = assertAllowed(req);
+    const uid = await assertAllowed(req);
     const data = (req.data ?? {}) as { episodeId?: unknown; language?: unknown; minutes?: unknown };
     const episodeId = typeof data.episodeId === "string" ? data.episodeId : "";
     const language = typeof data.language === "string" ? data.language : "";
@@ -102,7 +102,7 @@ export const suggestExcerpts = onCall(
  * under way keeps the passages it started with; the title is set either way.
  */
 export const planDrillPassages = onCall({ region: REGION, timeoutSeconds: 180, secrets: [anthropicApiKey] }, async (req) => {
-  const uid = assertAllowed(req);
+  const uid = await assertAllowed(req);
   const data = (req.data ?? {}) as { drillId?: unknown };
   const drillId = typeof data.drillId === "string" ? data.drillId : "";
   if (!ID.test(drillId)) throw new HttpsError("invalid-argument", "drillId is required.");

@@ -126,7 +126,7 @@ interface StudyRequest {
 
 /** Checks a study request and loads the episode's phrases and the learner's level. */
 async function loadStudyRequest(req: CallableRequest<unknown>): Promise<StudyRequest> {
-  const uid = assertAllowed(req);
+  const uid = await assertAllowed(req);
   const data = (req.data ?? {}) as { episodeId?: unknown; language?: unknown; retry?: unknown };
   const episodeId = typeof data.episodeId === "string" ? data.episodeId : "";
   const language = typeof data.language === "string" ? data.language : "";
@@ -317,7 +317,7 @@ const CONTEXT_LINES = 4;
 export const explainPhrase = onCall(
   { region: REGION, timeoutSeconds: 180, secrets: [anthropicApiKey] },
   async (req) => {
-    const uid = assertAllowed(req);
+    const uid = await assertAllowed(req);
     const data = (req.data ?? {}) as { key?: unknown; episodeId?: unknown; mode?: unknown; note?: unknown; question?: unknown };
     const key = typeof data.key === "string" && /^[0-9a-f]{32}$/.test(data.key) ? data.key : "";
     const episodeId = typeof data.episodeId === "string" ? data.episodeId : "";

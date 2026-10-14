@@ -1,17 +1,13 @@
 import { HttpsError, type CallableRequest } from "firebase-functions/v2/https";
-import { allowedEmails } from "./config.js";
+import { db } from "./admin.js";
 
-/** Throws unless the caller is a signed-in, verified, allow-listed user. Returns uid. */
-export function assertAllowed(req: CallableRequest<unknown>): string {
+/** Throws unless the caller is a signed-in, verified user listed in Firestore config/access. Returns uid. */
+export async function assertAllowed(req: CallableRequest<unknown>): Promise<string> {
   const auth = req.auth;
   if (!auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const email = (auth.token.email ?? "").toLowerCase();
   const verified = auth.token.email_verified === true;
-  const allowed = allowedEmails
-    .value()
-    .split(",")
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean);
+  const allowed: string[] = (await db.doc("config/access").get()).get("emails") ?? [];
   if (!verified || !allowed.includes(email)) {
     throw new HttpsError("permission-denied", "This account is not allowed to use this app.");
   }
