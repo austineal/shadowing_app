@@ -185,7 +185,7 @@ async function build(uid: string, episodeId: string): Promise<void> {
 
 /** Builds (or, after an error, rebuilds) a deck from its uploaded clips and manifest. */
 export const buildDeck = onCall({ region: REGION, memory: "2GiB", cpu: 2, timeoutSeconds: 540 }, async (req) => {
-  const uid = assertAllowed(req);
+  const uid = await assertAllowed(req);
   const episodeId = (req.data as { episodeId?: unknown })?.episodeId;
   if (typeof episodeId !== "string" || !episodeId) throw new HttpsError("invalid-argument", "episodeId is required.");
   const ref = db.doc(`users/${uid}/episodes/${episodeId}`);

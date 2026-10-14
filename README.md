@@ -28,7 +28,7 @@ desktop and installs to the Android home screen from Chrome.
 | `web/src/lib/align.ts` | Aligns a user transcript to speech-recognition words |
 | `web/src/lib/drill/` | Drill: passages, review schedule, session cadence, session plan and steps |
 | `functions/` | Cloud Functions (Node 22, europe-west2): transcription trigger, RSS import, retry |
-| `firestore.rules`, `storage.rules` | Owner-only access, allow-listed by email |
+| `firestore.rules`, `storage.rules` | Per-uid access, allow-listed by email in Firestore `config/access` |
 
 Data model (Firestore): `users/{uid}/episodes/{id}` holds episode metadata and
 status; `users/{uid}/episodes/{id}/data/segments` holds the phrase list. Storage
@@ -57,8 +57,12 @@ steps need the Firebase console or your own credentials:
    Choose location **europe-west2 (London)** to match Firestore and the functions.
    Then deploy the rules: `npm run deploy:rules`.
 3. **Enable Google sign-in** in *Build → Authentication → Sign-in method → Google*.
-   Sign in with the account listed in `firestore.rules`, `storage.rules` and the
-   `ALLOWED_EMAILS` parameter. To allow another account, add it in all three places.
+   Allowed accounts are listed in one Firestore document, `config/access`, field
+   `emails` (an array of lowercase email strings). Firestore rules, Storage rules and
+   the functions all read it, so adding or removing someone is a console edit, no
+   deploy. Each user only sees their own `users/{uid}/…` data. Clients can't read or
+   write `config/`. The first time Storage rules are deployed with this, the CLI asks
+   to grant Storage permission to read Firestore: say yes.
 4. **Store the ElevenLabs API key** as a secret (you type it, it never enters the repo):
    ```bash
    firebase functions:secrets:set ELEVENLABS_API_KEY
@@ -210,7 +214,7 @@ npm run typecheck
 ```
 
 Function parameters can be changed at deploy time or in `functions/.env`:
-`SCRIBE_MODEL_ID` (default `scribe_v1`) and `ALLOWED_EMAILS`.
+`SCRIBE_MODEL_ID` (default `scribe_v1`) and `CLAUDE_MODEL_ID`.
 
 ## Notes on languages
 

@@ -1,10 +1,11 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+    // Allowlist lives in Firestore config/access, shared with firestore.rules and the functions.
     function isAllowedUser() {
       return request.auth != null
         && request.auth.token.email_verified == true
-        && request.auth.token.email in ['austin.leirvik@gmail.com'];
+        && request.auth.token.email in firestore.get(/databases/(default)/documents/config/access).data.emails;
     }
     function isOwner(uid) {
       return isAllowedUser() && request.auth.uid == uid;
