@@ -214,7 +214,7 @@ npm run typecheck
 ```
 
 Function parameters can be changed at deploy time or in `functions/.env`:
-`SCRIBE_MODEL_ID` (default `scribe_v1`) and `CLAUDE_MODEL_ID`.
+`SCRIBE_MODEL_ID` (default `scribe_v2`) and `CLAUDE_MODEL_ID`.
 
 ## Notes on languages
 
