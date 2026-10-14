@@ -97,7 +97,7 @@ export function ExcerptSuggestionsSheet(props: {
         <h2>
           Suggested excerpts
           <Info>
-            Claude splits the episode into self-contained sections of about {minutes} minutes: roughly two weeks of new material
+            AI splits the episode into self-contained sections of about {minutes} minutes: roughly two weeks of new material
             at your {languageLabel(language)} pace
             {pace.measured ? "" : " (estimated from your schedule until you've drilled for two weeks)"}.
           </Info>
@@ -132,7 +132,7 @@ export function ExcerptSuggestionsSheet(props: {
               {busy ? "Reading the transcript…" : "Suggest excerpts"}
             </button>
             <Info>
-              Claude reads the whole transcript, which takes a minute or two for a long episode. You can close this and come back;
+              AI reads the whole transcript, which takes a minute or two for a long episode. You can close this and come back;
               the suggestions are saved with the episode.
             </Info>
           </div>

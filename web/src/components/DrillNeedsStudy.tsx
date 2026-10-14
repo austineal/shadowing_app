@@ -40,7 +40,7 @@ export function DrillNeedsStudy(props: {
 
   return (
     <div className="picker">
-      <p>{props.why ?? `Drilling needs study mode for this ${what}: Claude's translations are the English cues you answer from.`}</p>
+      <p>{props.why ?? `Drilling needs study mode for this ${what}: AI translations are the English cues you answer from.`}</p>
       {!level && (
         <label className="row small">
           Your level in {languageLabel(language)}, for the translations and notes:
