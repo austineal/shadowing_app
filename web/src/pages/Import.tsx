@@ -448,15 +448,19 @@ function FeedForm({ uid, language, folderId }: { uid: string; language: string; 
               </Link>
             ) : (
               <button
-                className="btn small"
+                className="btn primary"
                 disabled={subscribing || subscriptions === undefined}
                 onClick={() => void doSubscribe()}
-                title="Keep this podcast in your library and see new episodes as they come out"
               >
                 + Subscribe
               </button>
             )}
           </div>
+          {!currentSub && (
+            <p className="small muted" style={{ margin: "-4px 0 10px" }}>
+              Subscribe to keep this podcast in your library and see new episodes as they come out.
+            </p>
+          )}
           <div className="list" style={{ padding: 0 }}>
             {paged.shown.map((ep) => {
               const imported = findImported(ep);
