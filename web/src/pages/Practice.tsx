@@ -465,7 +465,7 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
             uid={uid}
             episode={episode}
             language={language}
-            why={`Study mode adds Claude's translation and notes to each ${isDeck ? "card" : "phrase"}, and lets you drill this ${isDeck ? "deck" : "episode"}. You can also turn it on later in ⚙.`}
+            why={`Study mode adds an AI translation and notes to each ${isDeck ? "card" : "phrase"}, and lets you drill this ${isDeck ? "deck" : "episode"}. You can also turn it on later in ⚙.`}
             cancelLabel="Not now"
             onClose={() => {
               localStorage.setItem(STUDY_OFFERED_KEY, "1");

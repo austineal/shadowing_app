@@ -61,7 +61,7 @@ export function ExcerptPicker(props: {
       <div className="picker">
         <p>
           {first === undefined
-            ? "Tap the first phrase of the excerpt you want to learn to say, or let Claude suggest some."
+            ? "Tap the first phrase of the excerpt you want to learn to say, or let AI suggest some."
             : "Now tap its last phrase."}
         </p>
         <div className="row">
@@ -113,7 +113,7 @@ export function ExcerptPicker(props: {
       });
       // Titled passages at natural break points replace the pause-based ones on the server when ready.
       void planDrillPassages(id).catch((e) => console.warn("Planning passages failed:", e));
-      let msg = `Added to your ${scheduleLabel(key, schedule)} drills. Claude is splitting it into titled passages.`;
+      let msg = `Added to your ${scheduleLabel(key, schedule)} drills. AI is splitting it into titled passages.`;
       if (!schedule) {
         await setSchedule(uid, key, DEFAULT_SCHEDULE);
         msg += ` ${languageLabel(language)} drills are now scheduled every day for 20 minutes; change that under Drill schedules in the library.`;

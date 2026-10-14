@@ -275,7 +275,7 @@ function DeckForm({ uid, language, folderId }: { uid: string; language: string; 
           <p style={{ margin: "0 0 6px" }}>
             <b>{read.cards.length}</b> {read.cards.length === 1 ? "card" : "cards"}
             {read.cards.length > 0 && withEnglish < read.cards.length && (
-              <span className="muted"> · {read.cards.length - withEnglish} without English (Claude can translate them)</span>
+              <span className="muted"> · {read.cards.length - withEnglish} without English (AI can translate them)</span>
             )}
           </p>
           {read.cards.slice(0, 3).map((c, i) => (
@@ -448,15 +448,19 @@ function FeedForm({ uid, language, folderId }: { uid: string; language: string; 
               </Link>
             ) : (
               <button
-                className="btn small"
+                className="btn primary"
                 disabled={subscribing || subscriptions === undefined}
                 onClick={() => void doSubscribe()}
-                title="Keep this podcast in your library and see new episodes as they come out"
               >
                 + Subscribe
               </button>
             )}
           </div>
+          {!currentSub && (
+            <p className="small muted" style={{ margin: "-4px 0 10px" }}>
+              Subscribe to keep this podcast in your library and see new episodes as they come out.
+            </p>
+          )}
           <div className="list" style={{ padding: 0 }}>
             {paged.shown.map((ep) => {
               const imported = findImported(ep);

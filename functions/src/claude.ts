@@ -142,11 +142,11 @@ export async function ask<T>(c: Call): Promise<T> {
     .finalMessage();
 
   if (message.stop_reason === "refusal") {
-    throw new Error(`Claude declined (${message.stop_details?.category ?? "no category"}).`);
+    throw new Error(`The AI declined (${message.stop_details?.category ?? "no category"}).`);
   }
-  if (message.stop_reason === "max_tokens") throw new Error("Claude's reply was cut off at the token limit.");
+  if (message.stop_reason === "max_tokens") throw new Error("The AI reply was cut off at the token limit.");
   const text = message.content.find((b) => b.type === "text")?.text;
-  if (!text) throw new Error("Claude returned no text.");
+  if (!text) throw new Error("The AI returned no text.");
   return JSON.parse(text) as T;
 }
 
@@ -172,7 +172,7 @@ export async function studyPhrases(req: StudyRequest): Promise<PhraseStudy[]> {
   const byId = new Map(parsed.phrases.map((p) => [p.id, p]));
   return ids.map((id, i) => {
     const p = byId.get(id);
-    if (!p) throw new Error(`Claude returned no entry for phrase ${id}.`);
+    if (!p) throw new Error(`The AI returned no entry for phrase ${id}.`);
     // Drop notes whose span isn't actually in the phrase (the UI highlights spans by exact match),
     // points below the learner's level, and points they know. Transcription notes are about the
     // text, so they stay.
@@ -234,12 +234,12 @@ ${req.context}`;
     })
     .finalMessage();
 
-  if (message.stop_reason === "refusal") throw new Error("Claude declined to answer this one.");
+  if (message.stop_reason === "refusal") throw new Error("The AI declined to answer this one.");
   const text = message.content
     .filter((b) => b.type === "text")
     .map((b) => b.text)
     .join("")
     .trim();
-  if (!text) throw new Error("Claude returned no answer.");
+  if (!text) throw new Error("The AI returned no answer.");
   return text;
 }

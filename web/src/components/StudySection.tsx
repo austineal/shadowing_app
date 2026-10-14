@@ -68,7 +68,7 @@ export function StudySection(props: {
           <button className="btn small primary" disabled={!level || busy} onClick={() => void run()}>
             {busy ? "Starting…" : "Turn on study mode"}
           </button>
-          <Info>Claude translates each phrase and explains grammar, idioms and colloquial speech above your level.</Info>
+          <Info>AI translates each phrase and explains grammar, idioms and colloquial speech above your level.</Info>
         </>
       ) : (
         <>
