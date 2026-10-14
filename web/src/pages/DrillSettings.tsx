@@ -50,7 +50,7 @@ export default function DrillSettings({ uid }: { uid: string }) {
   return (
     <div className="page">
       <header className="topbar">
-        <Link to="/" className="btn ghost icon" aria-label="Back">
+        <Link to="/drills" className="btn ghost icon" aria-label="Back">
           ‹
         </Link>
         <h1>
@@ -58,7 +58,7 @@ export default function DrillSettings({ uid }: { uid: string }) {
           <Info>
             Each language you drill gets its own rhythm, and can have more than one schedule, say one per podcast or deck. A
             session reviews what's due first, then learns new passages of your current excerpt with the time left. Choose
-            excerpts from an episode's <b>Drill</b> button.
+            excerpts from an episode's <b>+ Drill</b> button.
           </Info>
         </h1>
       </header>

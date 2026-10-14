@@ -8,9 +8,17 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /**
  * Shown in the practice dock instead of the drill controls while the episode or deck has study
- * mode off: drills cue each phrase with its translation, which study mode provides.
+ * mode off: drills cue each phrase with its translation, which study mode provides. `why` and
+ * `cancelLabel` reword it for the offer at the top of an episode that hasn't got study mode yet.
  */
-export function DrillNeedsStudy(props: { uid: string; episode: Episode; language: string; onClose: () => void }) {
+export function DrillNeedsStudy(props: {
+  uid: string;
+  episode: Episode;
+  language: string;
+  onClose: () => void;
+  why?: string;
+  cancelLabel?: string;
+}) {
   const { uid, episode, language } = props;
   const levels = useStudyLevels(uid);
   const [busy, setBusy] = useState(false);
@@ -32,7 +40,7 @@ export function DrillNeedsStudy(props: { uid: string; episode: Episode; language
 
   return (
     <div className="picker">
-      <p>Drilling needs study mode for this {what}: Claude's translations are the English cues you answer from.</p>
+      <p>{props.why ?? `Drilling needs study mode for this ${what}: Claude's translations are the English cues you answer from.`}</p>
       {!level && (
         <label className="row small">
           Your level in {languageLabel(language)}, for the translations and notes:
@@ -57,7 +65,7 @@ export function DrillNeedsStudy(props: { uid: string; episode: Episode; language
           {busy ? "Starting…" : "Turn on study mode"}
         </button>
         <button className="btn small" onClick={props.onClose}>
-          Cancel
+          {props.cancelLabel ?? "Cancel"}
         </button>
       </div>
     </div>

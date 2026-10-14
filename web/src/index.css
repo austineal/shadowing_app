@@ -147,9 +147,8 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 .card .editor { margin-top: 10px; }
 .card .editor .field { margin-bottom: 10px; }
 
-.podcasts { display: flex; gap: 12px; overflow-x: auto; padding: 14px 14px 2px; scrollbar-width: none; }
-.podcasts::-webkit-scrollbar { display: none; }
-.podcast-tile { position: relative; flex-shrink: 0; width: 84px; display: flex; flex-direction: column; gap: 6px; color: var(--text); }
+.podcasts { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 14px 12px; padding: 14px 14px 2px; }
+.podcast-tile { position: relative; width: 84px; justify-self: center; display: flex; flex-direction: column; gap: 6px; color: var(--text); }
 .podcast-tile img, .podcast-tile .art-fallback {
   width: 84px; height: 84px; border-radius: 12px; object-fit: cover; background: var(--bg-elev2); border: 1px solid var(--border);
 }
@@ -226,9 +225,8 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
 .picker { display: flex; flex-direction: column; gap: 8px; }
 .picker select.input { margin-left: 6px; }
 
-.drill-intro { padding: 12px 14px 0; }
 .drill-today { margin: 12px 14px 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-elev); display: flex; flex-direction: column; gap: 6px; }
-.drill-today h2 { font-size: 1rem; }
+.drill-row:first-child { border-top: 0; }
 .drill-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--border); }
 .drill-row .body { flex: 1; min-width: 0; }
 .drill-row .title { font-weight: 600; }
@@ -335,3 +333,15 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); line-height: 1.5; text-align: left; font-style: normal; font-weight: 400;
 }
 .info-pop p + p { margin-top: 6px; }
+
+/* Home tabs */
+.tabbar {
+  position: sticky; bottom: 0; z-index: 5; display: flex;
+  padding-bottom: var(--safe-bottom); border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(12px);
+}
+.tabbar a { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 14px 0; color: var(--text-dim); font-weight: 600; }
+.tabbar a.active { color: var(--accent); }
+.tabbar .badge { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: 0.75rem; display: flex; align-items: center; justify-content: center; }
+.empty .steps { text-align: left; max-width: 360px; margin: 14px auto 18px; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.study-offer { padding: 12px 14px; border-bottom: 1px solid var(--border); background: var(--bg-elev); }

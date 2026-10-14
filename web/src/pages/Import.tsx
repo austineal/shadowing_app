@@ -17,7 +17,7 @@ import { loadRecentFeeds, rememberFeed } from "../lib/settings";
 const LANG_KEY = "shadowing.lastLanguage";
 
 export default function Import({ uid }: { uid: string }) {
-  const [tab, setTab] = useState<"upload" | "feed" | "deck">("upload");
+  const [tab, setTab] = useState<"upload" | "feed" | "deck">("feed");
   const [language, setLanguage] = useState(() => localStorage.getItem(LANG_KEY) ?? "fr");
   useEffect(() => localStorage.setItem(LANG_KEY, language), [language]);
   const { folders } = useFolders(uid);
@@ -32,11 +32,11 @@ export default function Import({ uid }: { uid: string }) {
         <h1>Import</h1>
       </header>
       <div className="tabs">
-        <button className={tab === "upload" ? "active" : ""} onClick={() => setTab("upload")}>
-          Upload file
-        </button>
         <button className={tab === "feed" ? "active" : ""} onClick={() => setTab("feed")}>
           Podcast feed
+        </button>
+        <button className={tab === "upload" ? "active" : ""} onClick={() => setTab("upload")}>
+          Upload file
         </button>
         <button className={tab === "deck" ? "active" : ""} onClick={() => setTab("deck")}>
           Card deck
