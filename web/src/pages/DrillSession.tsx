@@ -134,7 +134,7 @@ function Shell({ title, children }: { title: string; children: React.ReactNode }
   return (
     <div className="page drill">
       <header className="topbar">
-        <Link to="/" className="btn ghost icon" aria-label="Back">
+        <Link to="/drills" className="btn ghost icon" aria-label="Back">
           ‹
         </Link>
         <h1>{title}</h1>
@@ -413,7 +413,7 @@ function SessionView(props: { uid: string; prepared: Prepared; onLearnAnyway: ()
     <div className="page drill">
       <header className="topbar">
         <Link
-          to="/"
+          to="/drills"
           className="btn ghost icon"
           aria-label="Back"
           onClick={(e) => {
@@ -438,8 +438,8 @@ function SessionView(props: { uid: string; prepared: Prepared; onLearnAnyway: ()
             {tally.learnedPassages > 0 && `${tally.learnedPassages} ${tally.learnedPassages === 1 ? "passage" : "passages"} learned. `}
             {tally.learnedCards > 0 && `${tally.learnedCards} new ${tally.learnedCards === 1 ? "card" : "cards"}.`}
           </p>
-          <Link to="/" className="btn primary">
-            Back to the library
+          <Link to="/drills" className="btn primary">
+            Back to drills
           </Link>
         </div>
       ) : started && cur ? (
@@ -530,8 +530,8 @@ function SessionView(props: { uid: string; prepared: Prepared; onLearnAnyway: ()
             </p>
           )}
           <HeldBack prepared={prepared} now={now} onLearnAnyway={props.onLearnAnyway} />
-          <Link to="/" className="btn" style={{ marginTop: 14 }}>
-            Back to the library
+          <Link to="/drills" className="btn" style={{ marginTop: 14 }}>
+            Back to drills
           </Link>
         </div>
       ) : (

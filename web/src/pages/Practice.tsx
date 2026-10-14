@@ -38,6 +38,9 @@ import { prepareStudy } from "../lib/study";
 import { DEFAULT_ENGLISH_VOICE } from "../lib/tts/client";
 import { MAX_REPEATS, REPEAT_PRESETS, type Episode, type PracticeSettings, type Segment, type SegmentsDoc, type TimedToken } from "../types";
 
+/** Set once the learner has said "Not now" to the study-mode offer, so it isn't made again. */
+const STUDY_OFFERED_KEY = "shadowing.studyOffered";
+
 export default function Practice({ uid }: { uid: string }) {
   const { id = "" } = useParams();
   const { episode, error: epError } = useEpisode(uid, id);
@@ -207,6 +210,7 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
   const [suggesting, setSuggesting] = useState(() => searchParams.get("drill") === "suggest" && language !== "auto" && !isDeck);
   /** The deck's drill sheet is open (decks are drilled whole, card by card, rather than by excerpt). */
   const [deckDrilling, setDeckDrilling] = useState(false);
+  const [studyOffered, setStudyOffered] = useState(() => localStorage.getItem(STUDY_OFFERED_KEY) !== null);
   const [tokens, setTokens] = useState<TimedToken[] | null>(null);
   const [busy, setBusy] = useState<string>();
   const [notice, setNotice] = useState<string>();
@@ -436,7 +440,7 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
             onClick={togglePicking}
             title={isDeck ? "Learn to say the cards from their English" : "Choose an excerpt to learn to say from its English"}
           >
-            Drill
+            + Drill
           </button>
         )}
         {!isDeck && (
@@ -454,6 +458,22 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
           ⚙
         </button>
       </header>
+
+      {!study.enabled && !studyOffered && !picking && !deckDrilling && language !== "auto" && (
+        <div className="study-offer">
+          <DrillNeedsStudy
+            uid={uid}
+            episode={episode}
+            language={language}
+            why={`Study mode adds Claude's translation and notes to each ${isDeck ? "card" : "phrase"}, and lets you drill this ${isDeck ? "deck" : "episode"}. You can also turn it on later in ⚙.`}
+            cancelLabel="Not now"
+            onClose={() => {
+              localStorage.setItem(STUDY_OFFERED_KEY, "1");
+              setStudyOffered(true);
+            }}
+          />
+        </div>
+      )}
 
       <div className="transcript" ref={listRef}>
         {segments.map((s, i) => {

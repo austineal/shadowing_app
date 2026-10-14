@@ -9,7 +9,6 @@ import { drillVoice } from "../lib/drill/prepare";
 import { isDue } from "../lib/drill/srs";
 import { drillScheduleKey, scheduleLabel } from "../lib/drill/schedules";
 import type { Drill, DrillPrefs, DrillSchedule, DrillSessionLog } from "../types";
-import { Info } from "./Info";
 import { PassageMap } from "./PassageMap";
 
 interface Row {
@@ -48,9 +47,13 @@ function buildRows(prefs: DrillPrefs, drills: Drill[], sessions: DrillSessionLog
     );
 }
 
+/** How many schedules have a session waiting now, for the Drill tab's badge. */
+export function dueSessions(prefs: DrillPrefs, drills: Drill[], sessions: DrillSessionLog[], now: number): number {
+  return buildRows(prefs, drills, sessions, now).filter((r) => r.availability.due && (r.due > 0 || !!r.learning)).length;
+}
+
 /**
- * The library's list of drill sessions: which languages are due now and when the others come up.
- * The library loads the data, so it knows when this is in place (see useScrollMemory there).
+ * The Drill tab's list of sessions: which languages are due now and when the others come up.
  */
 export function DrillToday({
   uid,
@@ -83,26 +86,33 @@ export function DrillToday({
     };
   }, [uid, toPrepare, voice]);
 
-  if (!rows) return null;
+  if (!rows) {
+    return (
+      <div className="center">
+        <div className="spinner" />
+      </div>
+    );
+  }
   if (rows.length === 0) {
     return (
-      <p className="drill-intro small muted">
-        <b>Drill</b>
-        <Info>Learn to say passages of an episode from their English, on a schedule for each language.</Info>
-        <Link to="/drill/settings">Set up ›</Link>
-      </p>
+      <div className="empty">
+        <p>Learn to say what you've listened to.</p>
+        <ol className="small steps">
+          <li>Set up a schedule for a language: how long a session is and how often.</li>
+          <li>
+            In <Link to="/">Listen</Link>, open an episode and tap <b>+ Drill</b> to pick an excerpt.
+          </li>
+          <li>Each session plays a phrase's English; you say it in the language, then hear the original.</li>
+        </ol>
+        <Link to="/drill/settings" className="btn primary">
+          Set up a schedule
+        </Link>
+      </div>
     );
   }
 
   return (
     <section className="drill-today">
-      <div className="row">
-        <h2>Drills</h2>
-        <span className="spacer" />
-        <Link to="/drill/settings" className="btn ghost small">
-          Schedules
-        </Link>
-      </div>
       {rows.map((r) => (
         <TodayRow key={r.key} row={r} now={now} />
       ))}
@@ -115,7 +125,7 @@ function TodayRow({ row, now }: { row: Row; now: number }) {
   const work = due > 0 || !!learning;
   const detail =
     row.excerpts === 0
-      ? "No excerpt yet: open an episode and tap Drill"
+      ? "No excerpt yet: open an episode in Listen and tap + Drill"
       : [due ? `${due} to review` : "", learning ? `learning ${learning.title ?? learning.episodeTitle}` : ""]
           .filter(Boolean)
           .join(" · ") || "All caught up";

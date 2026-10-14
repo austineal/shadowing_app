@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { DrillToday } from "../components/DrillToday";
 import { FolderSelect } from "../components/FolderSelect";
 import { OfflineButton } from "../components/OfflineButton";
 import { ShowMore } from "../components/ShowMore";
 import { usePaged } from "../hooks/usePaged";
 import { useEpisodes } from "../hooks/useEpisode";
-import { useDrillPrefs, useDrills, useRecentSessions } from "../hooks/useDrills";
+import { useDrills } from "../hooks/useDrills";
 import { useFolders, useSubscriptions } from "../hooks/useLibrary";
 import { signOut } from "../hooks/useAuth";
 import { coverageByEpisode, formatCoverage, type Coverage } from "../lib/drill/coverage";
@@ -99,8 +98,6 @@ export default function Library({ uid }: { uid: string }) {
   const { folders, error: foldersError } = useFolders(uid);
   const { subscriptions, error: subsError } = useSubscriptions(uid);
   const drills = useDrills(uid);
-  const drillPrefs = useDrillPrefs(uid);
-  const drillSessions = useRecentSessions(uid);
   const online = useOnline();
   const [usage, setUsage] = useState<{ usage: number; quota: number } | null>(null);
   const [saved, setSaved] = useState<Set<string>>(new Set());
@@ -153,7 +150,7 @@ export default function Library({ uid }: { uid: string }) {
   const { open, toggle, expand } = useExpanded(tree?.map((n) => n.id) ?? []);
   const subByFeed = useMemo(() => new Map(subscriptions?.map((s) => [s.feedUrl, s.id])), [subscriptions]);
   const folderName = useMemo(() => new Map(folders?.map((f) => [f.id, f.name])), [folders]);
-  const remember = useScrollMemory(!!tree && !!drills && !!drillPrefs && !!drillSessions && !!subscriptions);
+  const remember = useScrollMemory(!!tree && !!drills && !!subscriptions);
   const ctx: TreeContext = {
     uid,
     folders: folders ?? [],
@@ -198,7 +195,7 @@ export default function Library({ uid }: { uid: string }) {
           </>
         ) : (
           <>
-            <h1>Shadowing</h1>
+            <h1>Listen</h1>
             {!online && <span className="pill busy">Offline</span>}
             {!!episodes?.length && (
               <button className="btn ghost icon" onClick={openSearch} aria-label="Search episodes" title="Search episodes">
@@ -224,8 +221,6 @@ export default function Library({ uid }: { uid: string }) {
         <SearchResults found={found} query={query ?? ""} placeOf={placeOf} ctx={ctx} />
       ) : (
         <>
-          <DrillToday uid={uid} prefs={drillPrefs} drills={drills} sessions={drillSessions} />
-
           {subscriptions && subscriptions.length > 0 && <PodcastStrip subscriptions={subscriptions} />}
 
           {tree === undefined && (
@@ -235,10 +230,20 @@ export default function Library({ uid }: { uid: string }) {
           )}
           {tree && tree.length === 0 && (
             <div className="empty">
-              <p>No episodes yet.</p>
-              <p className="small" style={{ marginTop: 8 }}>
-                Import a podcast episode or upload an audio file to get started.
-              </p>
+              <p>Practise speaking by shadowing native audio.</p>
+              <ol className="small steps">
+                <li>Import a podcast episode, an audio file, or a deck of audio flashcards.</li>
+                <li>The audio is transcribed and cut into phrases. Play one, then repeat it aloud.</li>
+                <li>
+                  Turn on <b>Study</b> in an episode for translations and notes. Then pick excerpts to learn by heart in the{" "}
+                  <Link to="/drills">Drill</Link> tab.
+                </li>
+              </ol>
+              {online && (
+                <Link to="/import" className="btn primary">
+                  + Import
+                </Link>
+              )}
             </div>
           )}
           {tree && tree.length > 0 && (
