@@ -32,8 +32,8 @@ export default defineConfig({
             // Episode audio (Firebase Storage download URLs). Full files are put in this cache by
             // the app's "Save offline" action; the range-requests plugin then serves the <audio>
             // element's partial requests from it. Only complete (200) responses are ever stored, so
-            // ordinary streaming (206 responses) never pollutes the cache.
-            urlPattern: /^https:\/\/firebasestorage\.googleapis\.com\/v0\/b\/[^/]+\/o\/.*%2Faudio\.[A-Za-z0-9]+\?alt=media/,
+            // ordinary streaming (206 responses) never pollutes the cache. A deck's audio is deck.mp3.
+            urlPattern: /^https:\/\/firebasestorage\.googleapis\.com\/v0\/b\/[^/]+\/o\/.*%2F(audio|deck)\.[A-Za-z0-9]+\?alt=media/,
             handler: "CacheFirst",
             options: {
               cacheName: "audio-files",

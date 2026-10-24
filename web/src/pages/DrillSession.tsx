@@ -408,6 +408,13 @@ function SessionView(props: { uid: string; prepared: Prepared; onLearnAnyway: ()
   for (const b of plan.blocks) {
     if (b.kind === "learn" && b.cards) newCards.set(b.title, (newCards.get(b.title) ?? 0) + b.cards.length);
   }
+  const notSaved = prepared.notSaved > 0 && (
+    <div className="drill-notice small">
+      You're offline, so {prepared.notSaved} {prepared.notSaved === 1 ? "excerpt isn't" : "excerpts aren't"} included:{" "}
+      {prepared.notSaved === 1 ? "its episode isn't" : "their episodes aren't"} saved on this device. Save an episode or deck
+      offline to drill it without a connection.
+    </div>
+  );
 
   return (
     <div className="page drill">
@@ -514,7 +521,7 @@ function SessionView(props: { uid: string; prepared: Prepared; onLearnAnyway: ()
         </>
       ) : plan.blocks.length === 0 ? (
         <div className="section">
-          {prepared.drills.length === 0 ? (
+          {prepared.drills.length === 0 && !prepared.notSaved ? (
             <p>
               {prepared.schedule.name ? "Nothing on this schedule yet" : `No ${languageLabel(language)} excerpt yet`}. Open an episode,
               tap <b>Drill</b> and choose the stretch you want to learn to say
@@ -524,11 +531,12 @@ function SessionView(props: { uid: string; prepared: Prepared; onLearnAnyway: ()
             <p>
               Nothing to drill right now.
               {prepared.nextDue ? ` The next review is ${formatNext(prepared.nextDue, now)}.` : ""}
-              {prepared.drills.every((d) => frontier(d) < 0) && prepared.schedule.newMaterial
+              {prepared.drills.length > 0 && prepared.drills.every((d) => frontier(d) < 0) && prepared.schedule.newMaterial
                 ? " Every excerpt is learned: choose another from an episode to keep going."
                 : ""}
             </p>
           )}
+          {notSaved}
           <HeldBack prepared={prepared} now={now} onLearnAnyway={props.onLearnAnyway} />
           <Link to="/drills" className="btn" style={{ marginTop: 14 }}>
             Back to drills
@@ -565,6 +573,7 @@ function SessionView(props: { uid: string; prepared: Prepared; onLearnAnyway: ()
             ))}
           </ul>
 
+          {notSaved}
           <HeldBack prepared={prepared} now={now} onLearnAnyway={props.onLearnAnyway} />
           {prepared.untranslated > 0 && (
             <div className="drill-notice small">

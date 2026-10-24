@@ -4,6 +4,7 @@
  * session page and by the background preparation of English clips.
  */
 import { ensureAudioUrl, getEpisodeOnce, getSegmentsOnce } from "../episodes";
+import { isSaved, savedAudioUrls } from "../offline";
 import { loadDefaultSettings } from "../settings";
 import { normalizePhrase } from "../study";
 import { DEFAULT_ENGLISH_VOICE } from "../tts/client";
@@ -36,6 +37,8 @@ export interface Prepared {
   untranslated: number;
   /** The earliest upcoming review, to mention when there's nothing to do now. */
   nextDue?: number;
+  /** Excerpts left out while offline because their episode isn't saved on this device. */
+  notSaved: number;
 }
 
 /** The voice for drills: the one chosen for them, else the practice player's default. */
@@ -70,10 +73,16 @@ export async function prepareSession(uid: string, key: string, now: number, opti
   const drills = all.filter((d) => drillScheduleKey(d, prefs) === key);
   const schedule = prefs.schedules[key] ?? DEFAULT_SCHEDULE;
   const opts = scheduleOptions(schedule);
+  // Offline, only excerpts whose episode is saved on this device can play.
+  const saved = typeof navigator !== "undefined" && !navigator.onLine ? await savedAudioUrls() : undefined;
   const loaded = (
     await Promise.all(
       drills.map(async (drill) => {
-        const [episode, segDoc] = await Promise.all([getEpisodeOnce(uid, drill.episodeId), getSegmentsOnce(uid, drill.episodeId)]);
+        // Offline, an episode never opened on this device has no documents to read.
+        const [episode, segDoc] = await Promise.all([getEpisodeOnce(uid, drill.episodeId), getSegmentsOnce(uid, drill.episodeId)]).catch(
+          () => [null, null],
+        );
+        if (saved && !isSaved(saved, episode?.audioUrl)) return undefined;
         return episode && segDoc ? { drill, episode, segments: segDoc.segments } : undefined;
       }),
     )
@@ -132,5 +141,6 @@ export async function prepareSession(uid: string, key: string, now: number, opti
     english: sessionEnglish(plan.blocks, opts),
     untranslated,
     nextDue: upcoming.length ? Math.min(...upcoming) : undefined,
+    notSaved: saved ? drills.length - loaded.length : 0,
   };
 }

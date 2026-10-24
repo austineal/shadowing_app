@@ -238,6 +238,8 @@ export async function cacheEpisodeForOffline(
   for (const p of paths) {
     await loadText(p).catch(() => undefined); // loadText writes through to the cache
   }
+  // The phrases' translations, for drill cues. Reading them puts them in Firestore's offline cache.
+  await getDocs(query(collection(db, "users", uid, "phrases"), where("episodeIds", "array-contains", episode.id))).catch(() => null);
 }
 
 export async function removeEpisodeOfflineData(uid: string, episode: Episode): Promise<void> {
