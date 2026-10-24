@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import {
+  CACHE_SIZE_UNLIMITED,
   initializeFirestore,
   persistentLocalCache,
   persistentMultipleTabManager,
@@ -24,8 +25,10 @@ const FUNCTIONS_REGION = "europe-west2";
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+// No cache size limit: past the default 40 MB, Firestore drops documents no listener is using, such
+// as the phrases and translations of an episode saved for offline drilling.
 export const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager(), cacheSizeBytes: CACHE_SIZE_UNLIMITED }),
 });
 export const storage = getStorage(app);
 export const functions = getFunctions(app, FUNCTIONS_REGION);
