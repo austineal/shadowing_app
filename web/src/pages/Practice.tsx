@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useEpisode, useSegmentsDoc } from "../hooks/useEpisode";
 import { useDrills, useExcerptSuggestions, useNow } from "../hooks/useDrills";
@@ -33,13 +33,20 @@ import { OfflineButton } from "../components/OfflineButton";
 import { Info } from "../components/Info";
 import { PassageLabel } from "../components/PassageMap";
 import { StudySection } from "../components/StudySection";
-import { PhraseStudySheet } from "../components/PhraseStudySheet";
+import { PhraseStudyContent, PhraseStudySheet } from "../components/PhraseStudySheet";
 import { prepareStudy } from "../lib/study";
 import { DEFAULT_ENGLISH_VOICE } from "../lib/tts/client";
 import { MAX_REPEATS, REPEAT_PRESETS, type Episode, type PracticeSettings, type Segment, type SegmentsDoc, type TimedToken } from "../types";
 
 /** Set once the learner has said "Not now" to the study-mode offer, so it isn't made again. */
 const STUDY_OFFERED_KEY = "shadowing.studyOffered";
+
+/** Screens wide enough (tablets, desktops) to keep the study notes open beside the player. */
+const WIDE = window.matchMedia("(min-width: 720px)");
+const onWideChange = (cb: () => void) => {
+  WIDE.addEventListener("change", cb);
+  return () => WIDE.removeEventListener("change", cb);
+};
 
 export default function Practice({ uid }: { uid: string }) {
   const { id = "" } = useParams();
@@ -237,6 +244,8 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
 
   const study = useStudy(uid, episode, segments, language, settings.englishVoice ?? DEFAULT_ENGLISH_VOICE);
   const player = useSegmentPlayer(src, { segments, settings, title: episode.title, getClip: study.getClip });
+  /** Study notes follow playback in a side panel instead of the Study sheet. */
+  const panel = useSyncExternalStore(onWideChange, () => WIDE.matches) && study.enabled;
   const allDrills = useDrills(uid);
   const episodeDrills = useMemo(() => (allDrills ?? []).filter((d) => d.episodeId === episode.id), [allDrills, episode.id]);
   // The drilled excerpts as a map over the transcript: each passage coloured by how well it's known.
@@ -419,7 +428,7 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
   };
 
   return (
-    <div className="page practice">
+    <div className={`page practice ${panel ? "with-panel" : ""}`}>
       <header className="topbar">
         <Link to="/" className="btn ghost icon" aria-label="Back" onClick={() => player.stop()}>
           ‹
@@ -635,7 +644,7 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
                   ))}
                 </select>
               )}
-              {study.enabled && (
+              {study.enabled && !panel && (
                 <button className="btn small" disabled={!currentStudy} onClick={openStudy} title="Translation, notes and questions">
                   Study{currentStudy && study.shownNotes(currentStudy).length > 0 ? ` · ${study.shownNotes(currentStudy).length}` : ""}
                 </button>
@@ -657,6 +666,23 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
           </>
         )}
       </div>
+
+      {panel && (
+        <aside className="study-panel study-sheet">
+          {currentStudy ? (
+            <PhraseStudyContent
+              key={currentStudy.key}
+              uid={uid}
+              episodeId={episode.id}
+              language={language}
+              phrase={currentStudy}
+              known={study.known}
+            />
+          ) : (
+            <p className="small muted">No study notes for this {isDeck ? "card" : "phrase"} yet.</p>
+          )}
+        </aside>
+      )}
 
       {suggesting && study.enabled && (
         <ExcerptSuggestionsSheet
