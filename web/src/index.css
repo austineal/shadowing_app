@@ -128,6 +128,19 @@ textarea.input { min-height: 140px; resize: vertical; font-size: 0.95rem; }
 .modes { display: flex; gap: 6px; justify-content: center; align-items: center; flex-wrap: wrap; }
 .modes .btn.small.active, .sheet .btn.small.active { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
 
+/* Wide screens: the current phrase's study notes in a column beside the transcript and player. */
+.practice.with-panel {
+  max-width: 1280px; display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-areas: "top top" "offer offer" "list panel" "dock panel";
+}
+.with-panel .topbar { grid-area: top; }
+.with-panel .study-offer { grid-area: offer; }
+.with-panel .transcript { grid-area: list; }
+.with-panel .dock { grid-area: dock; }
+.study-panel { grid-area: panel; overflow-y: auto; padding: 16px 16px calc(16px + var(--safe-bottom)); border-left: 1px solid var(--border); }
+
 .sheet-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 20; display: flex; align-items: flex-end; justify-content: center; }
 .sheet {
   width: 100%; max-width: 760px; max-height: 88dvh; overflow-y: auto;
