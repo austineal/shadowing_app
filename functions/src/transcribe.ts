@@ -9,16 +9,23 @@ import { transcribeAudio } from "./elevenlabs.js";
 import { isVbrMp3, toCbrMp3 } from "./audio.js";
 import { assertAllowed } from "./auth.js";
 
-const AUDIO_PATH_RE = /^users\/([^/]+)\/episodes\/([^/]+)\/audio\.([A-Za-z0-9]+)$/;
+/** An episode's audio, or its video (whose audio track becomes audio.mp3). */
+const MEDIA_PATH_RE = /^users\/([^/]+)\/episodes\/([^/]+)\/(audio|video)\.[A-Za-z0-9]+$/;
 
 /** Statuses from which a transcription run may claim the episode. */
 const CLAIMABLE = new Set(["uploading", "uploaded", "error"]);
 
 /**
+ * Largest video whose audio can be extracted: the download goes to /tmp, which is held in the
+ * function's memory (4 GiB).
+ */
+const MAX_VIDEO_BYTES = 3 * 1024 ** 3;
+
+/**
  * Transcribes the audio for one episode and writes words.json to Storage.
  * Idempotent: only one run claims the episode; others exit early.
  */
-async function runTranscription(uid: string, episodeId: string, audioPath: string): Promise<void> {
+async function runTranscription(uid: string, episodeId: string): Promise<void> {
   const ref = db.doc(`users/${uid}/episodes/${episodeId}`);
 
   const claimed = await db.runTransaction(async (tx) => {
@@ -40,26 +47,46 @@ async function runTranscription(uid: string, episodeId: string, audioPath: strin
   }
 
   try {
+    const audioPath: string = claimed.audioPath;
     const file = bucket.file(audioPath);
-    const [meta] = await file.getMetadata();
-    let contentType = (meta.contentType as string | undefined) ?? "audio/mpeg";
-    logger.info("Downloading audio", { audioPath, size: meta.size, contentType });
-    let [audio] = await file.download();
-
-    if (isVbrMp3(audio)) {
-      // Replace the file before transcribing so the timings come from the audio that is played.
-      // Rewriting it re-fires the upload trigger, which skips because this run holds the claim.
-      // A new download token gives it a new URL, so no stale copy is served from the offline cache.
+    let audio: Buffer;
+    let contentType = "audio/mpeg";
+    if (claimed.videoPath && !(await file.exists())[0]) {
+      // A video: its audio track is extracted once into audio.mp3, which is transcribed, played
+      // and drilled like any other episode's audio. Saving it re-fires the upload trigger, which
+      // skips because this run holds the claim.
+      const video = bucket.file(claimed.videoPath);
+      const [meta] = await video.getMetadata();
+      if (Number(meta.size) > MAX_VIDEO_BYTES) throw new Error("The video is too large (over 3 GB) to extract its audio.");
       const started = Date.now();
-      audio = await toCbrMp3(audio);
-      contentType = "audio/mpeg";
+      audio = await toCbrMp3(video);
       await file.save(audio, {
         contentType,
         resumable: false,
-        metadata: { metadata: { ...meta.metadata, firebaseStorageDownloadTokens: randomUUID() } },
+        metadata: { metadata: { uid, episodeId, firebaseStorageDownloadTokens: randomUUID() } },
       });
-      await ref.update({ audioUrl: FieldValue.delete() });
-      logger.info("Re-encoded VBR MP3 as CBR", { ms: Date.now() - started, bytes: audio.length });
+      logger.info("Extracted audio from video", { ms: Date.now() - started, videoBytes: meta.size, bytes: audio.length });
+    } else {
+      const [meta] = await file.getMetadata();
+      contentType = (meta.contentType as string | undefined) ?? contentType;
+      logger.info("Downloading audio", { audioPath, size: meta.size, contentType });
+      [audio] = await file.download();
+
+      if (isVbrMp3(audio)) {
+        // Replace the file before transcribing so the timings come from the audio that is played.
+        // Rewriting it re-fires the upload trigger, which skips because this run holds the claim.
+        // A new download token gives it a new URL, so no stale copy is served from the offline cache.
+        const started = Date.now();
+        audio = await toCbrMp3(audio);
+        contentType = "audio/mpeg";
+        await file.save(audio, {
+          contentType,
+          resumable: false,
+          metadata: { metadata: { ...meta.metadata, firebaseStorageDownloadTokens: randomUUID() } },
+        });
+        await ref.update({ audioUrl: FieldValue.delete() });
+        logger.info("Re-encoded VBR MP3 as CBR", { ms: Date.now() - started, bytes: audio.length });
+      }
     }
 
     const language: string | undefined =
@@ -114,11 +141,11 @@ async function runTranscription(uid: string, episodeId: string, audioPath: strin
   }
 }
 
-/** Fires when an episode's audio file lands in Storage. */
+/** Fires when an episode's audio or video file lands in Storage. */
 export const transcribeOnUpload = onObjectFinalized(
   {
     region: REGION,
-    memory: "2GiB",
+    memory: "4GiB",
     cpu: 1,
     timeoutSeconds: 540,
     secrets: [elevenLabsApiKey],
@@ -126,10 +153,10 @@ export const transcribeOnUpload = onObjectFinalized(
   },
   async (event) => {
     const name = event.data.name;
-    const m = AUDIO_PATH_RE.exec(name);
+    const m = MEDIA_PATH_RE.exec(name);
     if (!m) return;
     const [, uid, episodeId] = m;
-    await runTranscription(uid, episodeId, name);
+    await runTranscription(uid, episodeId);
   },
 );
 
@@ -137,7 +164,7 @@ export const transcribeOnUpload = onObjectFinalized(
 export const retranscribeEpisode = onCall(
   {
     region: REGION,
-    memory: "2GiB",
+    memory: "4GiB",
     cpu: 1,
     timeoutSeconds: 540,
     secrets: [elevenLabsApiKey],
@@ -160,7 +187,7 @@ export const retranscribeEpisode = onCall(
     }
     // Allow re-running even from 'ready' so a language change can be applied.
     await ref.update({ status: "uploaded", updatedAt: FieldValue.serverTimestamp() });
-    await runTranscription(uid, episodeId, data.audioPath);
+    await runTranscription(uid, episodeId);
     const after = await ref.get();
     return { status: after.get("status"), error: after.get("error") ?? null };
   },

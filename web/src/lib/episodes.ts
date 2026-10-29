@@ -120,12 +120,18 @@ function extensionOf(file: File): string {
   return "mp3";
 }
 
-/** Creates the episode document, uploads the audio (and optional transcript), and hands off to the transcription trigger. */
+/**
+ * Creates the episode document, uploads the audio or video (and optional transcript), and hands off to the
+ * transcription trigger, which extracts a video's audio into audio.mp3.
+ */
 export async function uploadEpisode(uid: string, params: UploadParams): Promise<string> {
   const episodeRef = doc(episodesCollection(uid));
   const episodeId = episodeRef.id;
   const ext = extensionOf(params.file);
-  const audioPath = `users/${uid}/episodes/${episodeId}/audio.${ext}`;
+  const video = params.file.type.startsWith("video/") || (!params.file.type && /^(mp4|m4v|mov|mkv|webm|avi)$/.test(ext));
+  const dir = `users/${uid}/episodes/${episodeId}`;
+  const audioPath = `${dir}/audio.${video ? "mp3" : ext}`;
+  const videoPath = video ? `${dir}/video.${ext}` : undefined;
   const transcriptPath = params.transcriptText?.trim() ? `users/${uid}/episodes/${episodeId}/transcript.txt` : undefined;
 
   await setDoc(episodeRef, {
@@ -135,6 +141,7 @@ export async function uploadEpisode(uid: string, params: UploadParams): Promise<
     source: "upload",
     folderId: params.folderId ?? null,
     audioPath,
+    ...(videoPath ? { videoPath } : {}),
     ...(transcriptPath ? { transcriptPath } : {}),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -145,7 +152,7 @@ export async function uploadEpisode(uid: string, params: UploadParams): Promise<
   }
 
   await new Promise<void>((resolve, reject) => {
-    const task = uploadBytesResumable(ref(storage, audioPath), params.file, {
+    const task = uploadBytesResumable(ref(storage, videoPath ?? audioPath), params.file, {
       contentType: params.file.type || "audio/mpeg",
       customMetadata: { uid, episodeId },
     });
@@ -219,6 +226,11 @@ export async function ensureAudioUrl(uid: string, episode: Episode): Promise<str
   const url = await getDownloadURL(ref(storage, episode.audioPath));
   await updateEpisode(uid, episode.id, { audioUrl: url }).catch(() => undefined);
   return url;
+}
+
+/** A video episode's video URL. Not cached: videos are watched online, while the audio is saved for offline. */
+export function videoUrl(path: string): Promise<string> {
+  return getDownloadURL(ref(storage, path));
 }
 
 /** Downloads the audio and the word timings the episode depends on into the offline caches. */

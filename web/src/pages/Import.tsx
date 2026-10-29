@@ -108,11 +108,11 @@ function UploadForm({ uid, language, folderId }: { uid: string; language: string
   return (
     <div>
       <div className="field">
-        <label>Audio file</label>
+        <label>Audio or video file</label>
         <input
           className="input"
           type="file"
-          accept="audio/*,.mp3,.m4a,.ogg,.opus,.wav,.flac"
+          accept="audio/*,video/*,.mp3,.m4a,.ogg,.opus,.wav,.flac,.mp4,.m4v,.mov,.mkv,.webm"
           onChange={(e) => {
             const f = e.target.files?.[0] ?? null;
             setFile(f);
