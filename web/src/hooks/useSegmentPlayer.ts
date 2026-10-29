@@ -15,10 +15,21 @@ interface Options {
    * CLIP_WAIT_SEC), or undefined to skip it.
    */
   getClip?: (index: number) => AudioBuffer | Promise<AudioBuffer | undefined> | undefined;
+  /** A muted video of the same recording, kept in step with the audio while it's on screen. */
+  video?: { current: HTMLVideoElement | null };
 }
 
 /** How long a clip that is still being generated may hold up playback before it's skipped. */
 const CLIP_WAIT_SEC = 8;
+
+/** Seeks a video, resolving once it has the frame (or after a second, so a slow video never holds up the audio). */
+function seekVideo(v: HTMLVideoElement, t: number): Promise<void> {
+  return new Promise((resolve) => {
+    const id = window.setTimeout(resolve, 1000);
+    v.addEventListener("seeked", () => (window.clearTimeout(id), resolve()), { once: true });
+    v.currentTime = t;
+  });
+}
 
 /**
  * Drives an <audio> element phrase by phrase.
@@ -45,6 +56,11 @@ export function useSegmentPlayer(audioSrc: string | undefined, opts: Options) {
 
   const stateRef = useRef({ ...opts, index });
   stateRef.current = { ...opts, index };
+  /** The video, when it's loaded and on screen: it's only there to be watched, so it's left alone otherwise. */
+  const shownVideo = () => {
+    const v = stateRef.current.video?.current;
+    return v && v.readyState >= 1 && document.visibilityState === "visible" ? v : null;
+  };
 
   const rafRef = useRef(0);
   const cancelEndRef = useRef<() => void>(() => {});
@@ -161,6 +177,7 @@ export function useSegmentPlayer(audioSrc: string | undefined, opts: Options) {
     startTokenRef.current++;
     clearTimers();
     audioRef.current?.pause();
+    stateRef.current.video?.current?.pause();
     graphRef.current?.out.pause();
     setPhase("idle");
   };
@@ -169,6 +186,7 @@ export function useSegmentPlayer(audioSrc: string | undefined, opts: Options) {
     const a = audioRef.current;
     clearTimers();
     a?.pause();
+    stateRef.current.video?.current?.pause();
     const { settings, index: i, segments } = stateRef.current;
     setProgress(1);
     if (!segments[i]) {
@@ -286,6 +304,11 @@ export function useSegmentPlayer(audioSrc: string | undefined, opts: Options) {
       try {
         await startGraph(a);
         if (startTokenRef.current !== token) return; // stopped or replaced while the output started
+        const v = shownVideo();
+        if (v) {
+          await seekVideo(v, start); // so picture and sound start together
+          if (startTokenRef.current !== token) return;
+        }
         a.currentTime = start;
         await a.play();
       } catch (e) {
@@ -304,6 +327,12 @@ export function useSegmentPlayer(audioSrc: string | undefined, opts: Options) {
         if (Math.abs(p - lastProgress) > 0.01) {
           lastProgress = p;
           setProgress(p);
+        }
+        const v = shownVideo();
+        if (v) {
+          if (Math.abs(v.currentTime - t) > 0.3) v.currentTime = t;
+          if (v.playbackRate !== a.playbackRate) v.playbackRate = a.playbackRate;
+          if (v.paused) void v.play().catch(() => undefined);
         }
         if (t >= end || a.ended) {
           api.current.finishSegment();

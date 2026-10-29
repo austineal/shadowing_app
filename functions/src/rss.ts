@@ -129,7 +129,14 @@ const EXT_BY_TYPE: Record<string, string> = {
   "audio/x-wav": "wav",
   "audio/flac": "flac",
   "audio/webm": "webm",
+  "video/mp4": "mp4",
+  "video/x-m4v": "m4v",
+  "video/quicktime": "mov",
+  "video/webm": "webm",
 };
+
+/** Extensions taken for video when the server doesn't say audio/* or video/*. */
+const VIDEO_EXTS = new Set(["mp4", "m4v", "mov", "mkv", "webm", "avi"]);
 
 function pickExtension(contentType: string | null, url: URL): string {
   const ct = (contentType ?? "").split(";")[0].trim().toLowerCase();
@@ -192,14 +199,17 @@ export const importEpisode = onCall(
     const res = await fetch(audioUrl, { headers: { "user-agent": USER_AGENT }, redirect: "follow" });
     if (!res.ok || !res.body) throw new HttpsError("unavailable", `Audio URL returned HTTP ${res.status}.`);
     const contentType = res.headers.get("content-type");
+    const ct = (contentType ?? "").split(";")[0].trim().toLowerCase();
     const ext = pickExtension(contentType, audioUrl);
-    const finalContentType = EXT_BY_TYPE[(contentType ?? "").split(";")[0].trim().toLowerCase()]
-      ? (contentType as string).split(";")[0].trim()
-      : `audio/${ext === "mp3" ? "mpeg" : ext}`;
+    // A video is kept for watching; the transcription trigger extracts its audio into audio.mp3.
+    const video = ct.startsWith("video/") || (!ct.startsWith("audio/") && VIDEO_EXTS.has(ext));
+    const finalContentType = video ? ct || "application/octet-stream" : EXT_BY_TYPE[ct] ? ct : `audio/${ext === "mp3" ? "mpeg" : ext}`;
 
     const episodeRef = db.collection(`users/${uid}/episodes`).doc();
     const episodeId = episodeRef.id;
-    const audioPath = `users/${uid}/episodes/${episodeId}/audio.${ext}`;
+    const dir = `users/${uid}/episodes/${episodeId}`;
+    const audioPath = `${dir}/audio.${video ? "mp3" : ext}`;
+    const videoPath = video ? `${dir}/video.${ext}` : null;
 
     await episodeRef.set({
       title,
@@ -212,13 +222,14 @@ export const importEpisode = onCall(
       feedUrl: feedUrl ?? null,
       folderId,
       audioPath,
+      ...(videoPath ? { videoPath } : {}),
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
 
     logger.info("Downloading episode", { episodeId, audioUrl: audioUrl.toString(), contentType });
     try {
-      const file = bucket.file(audioPath);
+      const file = bucket.file(videoPath ?? audioPath);
       await pipeline(
         Readable.fromWeb(res.body as import("node:stream/web").ReadableStream),
         file.createWriteStream({

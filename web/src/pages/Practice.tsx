@@ -18,6 +18,7 @@ import {
   saveTranscript,
   updateEpisode,
   updateSegmentList,
+  videoUrl,
 } from "../lib/episodes";
 import { formatTime } from "../lib/format";
 import { isCharBased, languageLabel, normalizeLanguageCode } from "../lib/languages";
@@ -242,8 +243,20 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid, episode.id, episode.audioPath]);
 
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [videoSrc, setVideoSrc] = useState<string>();
+  useEffect(() => {
+    if (!episode.videoPath) return;
+    let cancelled = false;
+    // Offline the URL can't be looked up, and the audio plays without the picture.
+    videoUrl(episode.videoPath).then((u) => !cancelled && setVideoSrc(u), () => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [episode.videoPath]);
+
   const study = useStudy(uid, episode, segments, language, settings.englishVoice ?? DEFAULT_ENGLISH_VOICE);
-  const player = useSegmentPlayer(src, { segments, settings, title: episode.title, getClip: study.getClip });
+  const player = useSegmentPlayer(src, { segments, settings, title: episode.title, getClip: study.getClip, video: videoRef });
   /** Study notes follow playback in a side panel instead of the Study sheet. */
   const panel = useSyncExternalStore(onWideChange, () => WIDE.matches) && study.enabled;
   const allDrills = useDrills(uid);
@@ -482,6 +495,23 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
             }}
           />
         </div>
+      )}
+
+      {videoSrc && (
+        <video
+          ref={videoRef}
+          className="video"
+          src={videoSrc}
+          muted
+          playsInline
+          preload="auto"
+          // An audio-only file has no picture to show.
+          onLoadedMetadata={(e) => e.currentTarget.videoWidth === 0 && setVideoSrc(undefined)}
+          onError={() => {
+            setVideoSrc(undefined);
+            setNotice("This video can't play in this browser, so only its audio plays.");
+          }}
+        />
       )}
 
       <div className="transcript" ref={listRef}>

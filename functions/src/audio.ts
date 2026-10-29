@@ -37,13 +37,17 @@ export function isVbrMp3(audio: Buffer): boolean {
   return frame.includes("Xing") || frame.includes("VBRI");
 }
 
-/** Re-encodes audio as constant-bitrate MP3 so every browser seeks in it accurately. */
-export async function toCbrMp3(audio: Buffer): Promise<Buffer> {
+/**
+ * Re-encodes audio as constant-bitrate MP3 so every browser seeks in it accurately. Takes the bytes,
+ * or a Storage file (a video, say) that is downloaded straight to disk rather than held in memory.
+ */
+export async function toCbrMp3(audio: Buffer | { download(o: { destination: string }): Promise<unknown> }): Promise<Buffer> {
   const dir = await mkdtemp(join(tmpdir(), "normalize-"));
   try {
     const input = join(dir, "in");
     const output = join(dir, "out.mp3");
-    await writeFile(input, audio);
+    if (Buffer.isBuffer(audio)) await writeFile(input, audio);
+    else await audio.download({ destination: input });
     // Files (not pipes) so the encoder can write its LAME header, which tells decoders to trim
     // the encoder delay and keeps the timeline aligned with the original to within a few ms.
     await ffmpeg(["-i", input, "-map", "0:a:0", "-c:a", "libmp3lame", "-b:a", CBR_BITRATE, output]);

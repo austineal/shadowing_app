@@ -24,6 +24,8 @@ export interface Episode {
   /** Hidden from the library tree; search and the podcast's feed still find it. */
   archived?: boolean;
   audioPath: string;
+  /** A video episode's video, watched in the practice player; audioPath is its audio track, extracted by the transcription function. */
+  videoPath?: string;
   /** Cached Firebase download URL for the audio, saved after first lookup so offline playback needs no network. */
   audioUrl?: string;
   wordsPath?: string;

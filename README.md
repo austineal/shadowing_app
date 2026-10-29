@@ -4,7 +4,10 @@ A single-user progressive web app for practising **shadowing**: listening to a
 podcast phrase by phrase and repeating each phrase aloud. Runs in the browser on
 desktop and installs to the Android home screen from Chrome.
 
-- Import audio by uploading a file or picking an episode from a podcast RSS feed.
+- Import audio or video by uploading a file or picking an episode from a podcast RSS feed.
+  A video's audio track is extracted into the episode's audio, which is transcribed, drilled
+  and saved offline as usual; the practice screen shows the video, muted and kept in step
+  with the audio, when online.
 - Variable-bitrate MP3s are re-encoded at a constant 128 kbps before transcription.
   Browsers seek in VBR MP3s using a coarse table that can land tens of seconds from
   the requested time, so phrases would play the wrong audio; CBR seeks are exact.
@@ -32,7 +35,7 @@ desktop and installs to the Android home screen from Chrome.
 
 Data model (Firestore): `users/{uid}/episodes/{id}` holds episode metadata and
 status; `users/{uid}/episodes/{id}/data/segments` holds the phrase list. Storage
-holds `audio.<ext>`, `words.json` (ElevenLabs response), optional
+holds `audio.<ext>` (plus `video.<ext>` for a video episode), `words.json` (ElevenLabs response), optional
 `transcript.txt` and `aligned.json` under the same prefix.
 
 Study mode (translations, notes, English audio) is stored per phrase *text*, not

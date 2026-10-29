@@ -14,8 +14,8 @@ service firebase.storage {
     // users/{uid}/episodes/{episodeId}/audio.<ext> | words.json | transcript.txt | aligned.json
     match /users/{uid}/{allPaths=**} {
       allow read, delete: if isOwner(uid);
-      // Cap uploads at 1 GiB.
-      allow create, update: if isOwner(uid) && request.resource.size < 1024 * 1024 * 1024;
+      // Cap uploads at 3 GiB, the largest video whose audio the transcription function can extract.
+      allow create, update: if isOwner(uid) && request.resource.size < 3 * 1024 * 1024 * 1024;
     }
   }
 }
