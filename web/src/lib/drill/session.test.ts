@@ -101,6 +101,7 @@ describe("DrillSession: review", () => {
       ...["test:english", "test:speak", "test:answer", "test:answer"],
       ...["announce:announce", "announce:announce"],
       ...["shadow:shadow", "shadow:shadow"],
+      ...["announce:announce", "announce:announce"], // the end of the session
     ]);
     expect(events).toEqual([expect.objectContaining({ kind: "reviewed", misses: 0, passed: true })]);
   });
@@ -282,9 +283,23 @@ describe("DrillSession: late Missed presses", () => {
     const { miss, units } = playWithPress(session, (cur) => cur.unit.kind === "test" && testOf(cur) === "1" && cur.step.cue === "english");
     expect(miss).toMatchObject({ late: true, jumped: true });
     expect(miss!.phrases.map((p) => p.text)).toEqual(["p0"]);
-    expect(units).toEqual(["announce", "test 0", "test 1", "fixup 0", "test 1", "test 2", "announce", "shadow"]);
+    expect(units).toEqual(["announce", "test 0", "test 1", "fixup 0", "test 1", "test 2", "announce", "shadow", "announce"]);
     // One miss in a three-phrase passage fails it.
     expect(events).toEqual([expect.objectContaining({ misses: 1, passed: false })]);
+  });
+
+  it("counts a press during the next block's announcement for the block's last card", () => {
+    const cards = (drillId: string) => review({ drillId, leadIn: undefined, phrases: phrases(2), cards: [0, 1] });
+    const { session, events } = start([cards("a"), cards("b")]);
+    const { miss, units } = playWithPress(session, (cur) => cur.blockIndex === 0 && cur.unitIndex === 3);
+    expect(miss).toMatchObject({ late: true, jumped: true });
+    expect(miss!.phrases.map((p) => p.text)).toEqual(["p1"]);
+    // The second block is announced once more after the fix-up, and not again as it opens.
+    expect(units).toEqual(["announce", "test 0", "test 1", "announce", "fixup 1", "announce", "test 0", "test 1", "announce"]);
+    expect(events).toEqual([
+      expect.objectContaining({ block: expect.objectContaining({ drillId: "a" }), missed: [1] }),
+      expect.objectContaining({ block: expect.objectContaining({ drillId: "b" }), missed: [] }),
+    ]);
   });
 
   it("takes a late press at the start of the next phrase's learning, when learning", () => {
@@ -353,6 +368,7 @@ describe("DrillSession: learning", () => {
       ...["learn", "test 2", "test 1+2"],
       ...["announce", "test 0", "test 1", "test 2"],
       ...["announce", "shadow"],
+      "announce",
     ]);
     expect(events.map((e) => (e.kind === "learning" ? `learning ${e.phrases}` : e.kind))).toEqual([
       "learning 1",
