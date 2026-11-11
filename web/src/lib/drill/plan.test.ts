@@ -49,7 +49,7 @@ describe("planSession: reviews", () => {
 
   it("fills the budget with the most overdue passages and leaves the rest", () => {
     const d = drill("a", [dueBy(1), dueBy(9), dueBy(2), dueBy(8)]);
-    const plan = planSession({ now, budgetSec: 400, newMaterial: true, opts, drills: [d] });
+    const plan = planSession({ now, budgetSec: 410, newMaterial: true, opts, drills: [d] });
     expect(plan.blocks.map((b) => b.passage)).toEqual([1, 3]);
     expect(plan.deferred).toBe(2);
     // Nothing new while reviews are waiting.

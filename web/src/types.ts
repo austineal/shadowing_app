@@ -219,6 +219,8 @@ export interface DrillPassage {
   last?: number;
   reviews?: number;
   lapses?: number;
+  /** How much its tests are eased (more time to answer, slower answer) because it keeps being missed; 0 or absent is the configured timing. */
+  slack?: number;
   /** A card of a deck rather than a stretch of an episode (see Drill.kind). */
   card?: boolean;
 }

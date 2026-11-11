@@ -4,6 +4,7 @@ import {
   blockAnnouncement,
   blockUnits,
   sessionEnglish,
+  type Block,
   type Current,
   type LearnBlock,
   type Miss,
@@ -70,6 +71,25 @@ function start(blocks: (ReviewBlock | LearnBlock)[]) {
 /** Miss the test of phrase `i` on its first (graded) attempt, while its speaking pause runs. */
 const missFirstTry = (i: number) => (cur: Current) =>
   cur.unit.kind === "test" && cur.unit.test?.phrases.join() === String(i) && cur.step.cue === "speak";
+
+describe("slack", () => {
+  it("gives a missed cue's retry more time, and a block's eased phrases more from the start", () => {
+    const opts = drillOptions("light", { paddingMs: 0, gapFactor: 1.3 });
+    const phrases = [0, 1].map((i) => ({ start: i * 4, end: i * 4 + 4, text: `t${i}`, english: `e${i}` }));
+    const block: Block = { kind: "review", drillId: "d", episodeId: "ep", title: "", passage: 0, passageCount: 1, phrases, level: 0, slack: [0, 2] };
+    const s = new DrillSession([block], opts, () => {});
+    const speak = () => {
+      while (s.current()!.step.cue !== "speak") s.advance();
+      return (s.current()!.step.play as { sec: number }).sec;
+    };
+    expect(speak()).toBeCloseTo(8);
+    s.missed();
+    while (s.current()!.unit.kind !== "fixup") s.advance();
+    expect(speak()).toBeCloseTo(8 * 1.4);
+    while (s.current()!.unit.kind !== "test") s.advance();
+    expect(speak()).toBeCloseTo(8 * 1.8);
+  });
+});
 
 describe("DrillSession: review", () => {
   it("announces the passage, plays a lead-in, tests each phrase from its English, then announces the shadowing", () => {

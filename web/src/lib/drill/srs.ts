@@ -3,6 +3,7 @@
  * review and drops one when it fails; each level waits roughly twice as long as the one before.
  */
 import type { DrillPassage } from "../../types";
+import { clampSlack } from "./steps";
 
 /** Days until the next review, by level. Level 0 (just learned, or failed from level 1) means the next session. */
 const INTERVAL_DAYS = [0, 1, 3, 7, 15, 30, 60, 120, 240];
@@ -88,10 +89,15 @@ export function reviewPasses(misses: number, cues: number): boolean {
  * planned (a missed day, say), it moves up to the level matching the gap it survived, so time off
  * doesn't cost extra reviews of what's still remembered. Failing moves it down one level.
  * `choose` can move a long gap's next review onto a lighter day (see dueAfter).
+ * A review with any cue `missed` (it may still pass) eases the passage's tests a step; a clean
+ * one tightens them a step, back towards the configured timing.
  */
-export function reviewedPassage(p: DrillPassage, passed: boolean, now: number, choose?: DayChooser): DrillPassage {
+export function reviewedPassage(p: DrillPassage, passed: boolean, now: number, choose?: DayChooser, missed = !passed): DrillPassage {
   const level = p.level ?? 0;
   const reviews = (p.reviews ?? 0) + 1;
+  // ponytail: one slack per passage, so one hard phrase eases its whole passage; per-phrase if that drags.
+  const slack = clampSlack((p.slack ?? 0) + (missed ? 1 : -1));
+  p = { ...p, slack };
   if (!passed) {
     const down = Math.max(0, level - 1);
     return { ...p, level: down, due: dueAfter(down, now, choose), last: now, reviews, lapses: (p.lapses ?? 0) + 1 };

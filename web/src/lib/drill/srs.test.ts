@@ -81,6 +81,18 @@ describe("dueAfter: spreading reviews", () => {
 describe("reviewedPassage", () => {
   const base = { start: 0, end: 40 };
 
+  it("eases a passage a step per review with a miss, and tightens it a step per clean one", () => {
+    let p = learnedPassage(base, at(0, 8));
+    for (let n = 0; n < 5; n++) p = reviewedPassage(p, false, at(n, 18));
+    expect(p.slack).toBe(3);
+    p = reviewedPassage(p, true, at(6, 8), undefined, true); // passed, but with a miss
+    expect(p.slack).toBe(3);
+    p = reviewedPassage(p, true, at(7, 8));
+    expect(p.slack).toBe(2);
+    for (let n = 0; n < 5; n++) p = reviewedPassage(p, true, at(8 + n, 8));
+    expect(p.slack).toBe(0);
+  });
+
   it("climbs a level at a time when reviews are on schedule", () => {
     let p = learnedPassage(base, at(0, 8));
     expect(p.level).toBe(0);

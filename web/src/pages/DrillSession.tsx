@@ -75,7 +75,7 @@ class Recorder {
       const others = [...this.drills.values()].flatMap((x) => x.passages.filter((_, j) => x.id !== d.id || j !== i));
       const booked = bookedByDay(others, this.schedule, now, this.opts);
       const spread = spreadReviews(booked, this.schedule, passages[i].end - passages[i].start, this.opts);
-      passages[i] = reviewedPassage(passages[i], e.passed, now, spread);
+      passages[i] = reviewedPassage(passages[i], e.passed, now, spread, e.misses > 0);
       next = { ...d, passages };
       add.reviewed = 1;
       add.passed = e.passed ? 1 : 0;

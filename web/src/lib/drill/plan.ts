@@ -101,7 +101,7 @@ function cardsBase(d: PlanDrill, cards: number[], random: () => number) {
 function cardReviewBlock(d: PlanDrill, cards: number[], random: () => number): ReviewBlock {
   // One answer time for the round: the least practised card's.
   const level = Math.min(...cards.map((i) => d.drill.passages[i].level ?? 0));
-  return { kind: "review", ...cardsBase(d, cards, random), level };
+  return { kind: "review", ...cardsBase(d, cards, random), level, slack: cards.map((i) => d.drill.passages[i].slack ?? 0) };
 }
 
 function cardLearnBlock(d: PlanDrill, cards: number[], random: () => number): LearnBlock {
@@ -141,7 +141,8 @@ function base(d: PlanDrill, i: number) {
 
 function reviewBlock(d: PlanDrill, i: number, withLeadIn: boolean): ReviewBlock {
   const p = d.drill.passages[i];
-  return { kind: "review", ...base(d, i), level: p.level ?? 0, leadIn: withLeadIn ? phraseBefore(d.phrases, p.start) : undefined };
+  const b = base(d, i);
+  return { kind: "review", ...b, slack: b.phrases.map(() => p.slack ?? 0), level: p.level ?? 0, leadIn: withLeadIn ? phraseBefore(d.phrases, p.start) : undefined };
 }
 
 export function planSession(input: PlanInput): SessionPlan {
