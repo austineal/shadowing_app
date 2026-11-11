@@ -74,6 +74,8 @@ interface Unit {
   missed?: boolean;
   /** Learning: how many of the passage's phrases are learned once this unit is done. */
   learned?: number;
+  /** The announcement of what follows the block, played before the block closes (see finishUnit). */
+  closing?: boolean;
 }
 
 export type SessionEvent =
@@ -363,10 +365,11 @@ export class DrillSession {
     unit.missed = true;
   }
 
-  private enterBlock(i: number) {
+  /** `skip`: opening units already played, as the block before closed. */
+  private enterBlock(i: number, skip = 0) {
     this.blockIndex = i;
     this.units = i < this.blocks.length ? blockUnits(this.blocks[i], this.opts) : [];
-    this.unitIndex = 0;
+    this.unitIndex = skip;
     this.stepIndex = 0;
     this.misses = 0;
     this.missedPhrases = new Set();
@@ -383,6 +386,15 @@ export class DrillSession {
     this.stepIndex = 0;
     if (this.unitIndex < this.units.length) return;
 
+    // A block that ends on a test stays open while what follows is announced, so that a Missed
+    // pressed a moment late still counts for that test rather than for the next block's first.
+    // The session's last block always does, to say that it's the end.
+    const next = this.blocks[this.blockIndex + 1];
+    if (!unit.closing && (unit.test || !next)) {
+      this.units.push({ ...announceUnit(next ? blockAnnouncement(next) : ANNOUNCE.end), closing: true });
+      return;
+    }
+
     if (block.kind === "review") {
       const tests = this.units.filter((u) => u.test?.graded).length;
       this.onEvent({
@@ -395,6 +407,6 @@ export class DrillSession {
     } else if (block.wrapUp) {
       this.onEvent({ kind: "learned", block });
     }
-    this.enterBlock(this.blockIndex + 1);
+    this.enterBlock(this.blockIndex + 1, unit.closing && next ? 1 : 0);
   }
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createGraph, outputOf, schedule, startOutput, type Graph } from "../lib/audioGraph";
 import type { Current, DrillSession } from "../lib/drill/session";
-import { ANNOUNCE, ANNOUNCE_CHIME_SEC, type Play } from "../lib/drill/steps";
+import { ANNOUNCE_CHIME_SEC, type Play } from "../lib/drill/steps";
 
 type DrillPlayerState = "idle" | "playing" | "paused" | "finished";
 
@@ -213,8 +213,8 @@ class DrillAudio {
       this.playing = false;
       this.stopClock();
       this.on.state("finished");
-      // Say so, for anyone listening with the screen off, then let the output go quiet.
-      this.announce(ANNOUNCE.end, () => this.graph?.out.pause());
+      // The session has said so itself (see DrillSession.finishUnit): let the output go quiet.
+      this.graph?.out.pause();
       return;
     }
     if (!this.playing) return;
