@@ -43,6 +43,8 @@ interface BlockBase {
    */
   cards?: number[];
   order?: number[];
+  /** By phrase: how much its tests are eased because it keeps being missed (see MAX_SLACK). Absent: not at all. */
+  slack?: number[];
 }
 
 export interface ReviewBlock extends BlockBase {
@@ -90,9 +92,12 @@ const MISS_RATE = { review: 0.1, learn: 0.15 };
 
 const levelOf = (block: Block) => (block.kind === "review" ? block.level : -1);
 
+/** A cue's slack: its most-missed phrase's, plus one for each time it has been missed this session. */
+const slackOf = (block: Block, idx: number[], attempt = 0) => Math.max(0, ...idx.map((i) => block.slack?.[i] ?? 0)) + attempt;
+
 function testUnit(block: Block, idx: number[], graded: boolean, opts: DrillOptions): Unit {
   const ps = idx.map((i) => block.phrases[i]);
-  return { kind: "test", steps: testSteps(block.episodeId, ps, levelOf(block), opts), test: { phrases: idx, graded, attempt: 0 } };
+  return { kind: "test", steps: testSteps(block.episodeId, ps, levelOf(block), opts, slackOf(block, idx)), test: { phrases: idx, graded, attempt: 0 } };
 }
 
 /**
@@ -102,14 +107,15 @@ function testUnit(block: Block, idx: number[], graded: boolean, opts: DrillOptio
 function fixupUnit(block: Block, missed: Unit, opts: DrillOptions): Unit {
   const idx = missed.test!.phrases;
   const ps = idx.map((i) => block.phrases[i]);
+  const attempt = missed.test!.attempt + 1;
   const repeat =
     block.kind === "review" && ps.length > 1
       ? ps.flatMap((p) => repeatSteps(block.episodeId, [p], opts, 1))
       : repeatSteps(block.episodeId, ps, opts);
   return {
     kind: "fixup",
-    steps: [...repeat, ...testSteps(block.episodeId, ps, levelOf(block), opts)],
-    test: { phrases: idx, graded: false, attempt: missed.test!.attempt + 1 },
+    steps: [...repeat, ...testSteps(block.episodeId, ps, levelOf(block), opts, slackOf(block, idx, attempt))],
+    test: { phrases: idx, graded: false, attempt },
   };
 }
 

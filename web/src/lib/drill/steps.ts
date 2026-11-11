@@ -77,6 +77,16 @@ const GRACE_SEC = 2.0;
 const duration = (ps: SessionPhrase[]) => ps[ps.length - 1].end - ps[0].start;
 
 /**
+ * Slack: how much a phrase that keeps being missed is eased, from 0 (the configured timing, which
+ * is the goal) to MAX_SLACK. Each step gives 40% more time to answer and an answer played 10%
+ * slower (no slower than the slowed learning plays).
+ */
+export const MAX_SLACK = 3;
+export const clampSlack = (n: number) => Math.max(0, Math.min(MAX_SLACK, n));
+const slackPause = (slack: number) => 1 + 0.4 * clampSlack(slack);
+const slackRate = (slack: number) => Math.max(SLOW_RATE, 1 - 0.1 * clampSlack(slack));
+
+/**
  * Time to say phrases after their English cue: generous while learning (level -1) and at first,
  * closer to the speaker's own pace as the passage matures.
  */
@@ -130,9 +140,9 @@ export function learnSteps(episodeId: string, p: SessionPhrase, opts: DrillOptio
 /**
  * The English of one or more consecutive phrases, time to say them, then the original as the
  * answer. The text stays hidden until the answer plays; an answer of several phrases is shown a
- * phrase at a time as it plays, then whole.
+ * phrase at a time as it plays, then whole. `slack` eases a cue that keeps being missed.
  */
-export function testSteps(episodeId: string, ps: SessionPhrase[], level: number, opts: DrillOptions): Step[] {
+export function testSteps(episodeId: string, ps: SessionPhrase[], level: number, opts: DrillOptions, slack = 0): Step[] {
   const english = ps.map((p) => p.english ?? "").join(" ");
   const steps: Step[] = [];
   ps.forEach((p, i) => {
@@ -140,8 +150,8 @@ export function testSteps(episodeId: string, ps: SessionPhrase[], level: number,
     steps.push({ play: englishPlay(episodeId, p), cue: "english", english });
   });
   const text = textOf(ps);
-  steps.push({ play: { kind: "silence", sec: speakSeconds(duration(ps), level, opts.answerExtraSec) }, cue: "speak", english });
-  steps.push({ play: source(episodeId, ps), cue: "answer", text, english, ...(ps.length > 1 ? { phrases: ps } : {}) });
+  steps.push({ play: { kind: "silence", sec: speakSeconds(duration(ps), level, opts.answerExtraSec) * slackPause(slack) }, cue: "speak", english });
+  steps.push({ play: source(episodeId, ps, slackRate(slack)), cue: "answer", text, english, ...(ps.length > 1 ? { phrases: ps } : {}) });
   steps.push({ play: { kind: "silence", sec: GRACE_SEC }, cue: "answer", text, english });
   return steps;
 }

@@ -29,6 +29,19 @@ describe("testSteps", () => {
     expect(pause(0)).toEqual({ kind: "silence", sec: 8 });
     expect(pause(3)).toEqual({ kind: "silence", sec: 11 });
   });
+  it("eases a cue that keeps being missed: longer pause, slower answer, up to a limit", () => {
+    const opts = drillOptions("full", { paddingMs: 0, gapFactor: 1.3 });
+    const p = { start: 0, end: 4, text: "x", english: "y" };
+    const at = (slack: number) => {
+      const steps = testSteps("ep", [p], 0, opts, slack);
+      return [steps.find((s) => s.cue === "speak")!.play, steps.find((s) => s.cue === "answer")!.play];
+    };
+    expect(at(0)).toMatchObject([{ sec: 8 }, { rate: 1 }]);
+    expect(at(1)[0]).toMatchObject({ sec: expect.closeTo(11.2) });
+    expect(at(1)[1]).toMatchObject({ rate: 0.9 });
+    expect(at(9)).toEqual(at(3));
+    expect(at(3)[1]).toMatchObject({ rate: 0.75 });
+  });
   it("leaves two seconds after the answer to press Missed", () => {
     const steps = testSteps("ep", [{ start: 0, end: 4, text: "x", english: "y" }], 0, drillOptions("full", { paddingMs: 0, gapFactor: 1 }));
     expect(steps[steps.length - 1]).toMatchObject({ cue: "answer", play: { kind: "silence", sec: 2 } });
