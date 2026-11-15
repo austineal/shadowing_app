@@ -2,7 +2,7 @@
  * On-device text-to-speech. Piper voices run in a shared worker thread (see worker.ts); voice
  * models are downloaded once into Cache Storage and then work offline.
  */
-import { VOICE_CACHE, voiceModelUrl, type ProgressFn } from "../piper/runner";
+import { VOICE_CACHE, voiceModelUrl, type ProgressFn } from "../piper/voices";
 import type { TtsRequest, TtsResponse } from "./worker";
 
 /** Voices offered for English. Medium quality: fast enough on a phone (~0.4x real time). */

@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useEpisode, useSegmentsDoc } from "../hooks/useEpisode";
 import { useDrills, useExcerptSuggestions, useNow } from "../hooks/useDrills";
@@ -93,6 +93,9 @@ function Shell({ title, children, right }: { title: string; children: React.Reac
   );
 }
 
+/** An episode whose status hasn't moved for this long is stuck. Must match STALE_CLAIM_MS in functions/src/admin.ts. */
+const STALE_MS = 10 * 60_000;
+
 /** Shown while the episode is uploading/transcribing or after an error. */
 function StatusView({ episode }: { episode: Episode }) {
   const [busy, setBusy] = useState(false);
@@ -109,25 +112,40 @@ function StatusView({ episode }: { episode: Episode }) {
       setBusy(false);
     }
   };
+  const now = useNow();
+  const updated = episode.updatedAt?.toMillis();
+  const stale = updated !== undefined && now - updated > STALE_MS;
+  const failed = episode.status === "error";
+  // The server run was killed (time limit, memory) before it could record an error, or never started.
+  const stuck = stale && (episode.status === "transcribing" || episode.status === "uploaded");
+  const deck = episode.kind === "deck";
   return (
     <Shell title={episode.title}>
       <div className="center" style={{ flex: 1 }}>
-        {episode.status === "error" ? (
+        {failed || stuck ? (
           <>
-            <p className="error">{episode.kind === "deck" ? "Building the deck failed" : "Transcription failed"}</p>
-            <p className="small muted" style={{ maxWidth: 480 }}>{episode.error}</p>
+            <p className="error">
+              {stuck ? "This has taken too long and has probably stopped." : deck ? "Building the deck failed" : "Transcription failed"}
+            </p>
+            {failed && <p className="small muted" style={{ maxWidth: 480 }}>{episode.error}</p>}
             <button className="btn primary" disabled={busy} onClick={() => void retry()}>
-              {busy ? "Retrying…" : episode.kind === "deck" ? "Try again" : "Retry transcription"}
+              {busy ? "Retrying…" : deck ? "Try again" : "Retry transcription"}
             </button>
             {msg && <p className="error small">{msg}</p>}
           </>
         ) : (
           <>
             <div className="spinner" />
-            <p>{episode.status === "transcribing" ? (episode.kind === "deck" ? "Building the deck…" : "Transcribing…") : "Uploading…"}</p>
+            <p>{episode.status === "transcribing" ? (deck ? "Building the deck…" : "Transcribing…") : "Uploading…"}</p>
             <p className="small muted">
               Long episodes can take a few minutes. You can leave this page; it will be ready when you come back.
             </p>
+            {stale && episode.status === "uploading" && (
+              <p className="small muted">
+                Still here after a long while? If the upload was interrupted, delete this {deck ? "deck" : "episode"} in the library
+                and import it again.
+              </p>
+            )}
           </>
         )}
       </div>
@@ -351,6 +369,8 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
       }
       const next = [...segments.slice(0, i), ...parts, ...segments.slice(i + 1)];
       await persistSegments(next, i);
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(undefined);
     }
@@ -359,7 +379,7 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
   const onMerge = async (i: number) => {
     if (i + 1 >= segments.length) return;
     const next = [...segments.slice(0, i), mergeSegments(segments[i], segments[i + 1], charBased), ...segments.slice(i + 2)];
-    await persistSegments(next, i);
+    await persistSegments(next, i).catch((e) => setNotice(e instanceof Error ? e.message : String(e)));
   };
 
   const onRegenerate = async (maxPhraseSec: number) => {
@@ -406,14 +426,34 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
     [settings.mode],
   );
 
-  const isPicked = (i: number) => {
-    if (picking?.first === undefined) return false;
+  /** The phrases picked for an excerpt so far: first and last, inclusive. */
+  const picked = useMemo<readonly [number, number] | null>(() => {
+    if (picking?.first === undefined) return null;
     const last = picking.last ?? picking.first;
-    return i >= Math.min(picking.first, last) && i <= Math.max(picking.first, last);
-  };
+    return [Math.min(picking.first, last), Math.max(picking.first, last)];
+  }, [picking]);
   /** First tap sets the start of the excerpt, the second its end; a third starts again. */
-  const pick = (i: number) =>
-    setPicking((p) => (!p || p.first === undefined || p.last !== undefined ? { first: i } : { first: p.first, last: i }));
+  const pick = useCallback(
+    (i: number) => setPicking((p) => (!p || p.first === undefined || p.last !== undefined ? { first: i } : { first: p.first, last: i })),
+    [],
+  );
+  // What the transcript needs, kept the same from one render to the next so that it only redraws
+  // when something in it changes, not on every step of the progress bar.
+  const { phraseAt, shownNotes } = study;
+  const noted = useMemo(
+    () =>
+      segments.map((_, i) => {
+        const p = phraseAt(i);
+        return !!p && shownNotes(p).length > 0;
+      }),
+    [segments, phraseAt, shownNotes],
+  );
+  const edit = useRef({ onSplit, onMerge });
+  useEffect(() => {
+    edit.current = { onSplit, onMerge };
+  });
+  const split = useCallback((i: number) => void edit.current.onSplit(i), []);
+  const merge = useCallback((i: number) => void edit.current.onMerge(i), []);
   const stopPicking = () => {
     setPicking(null);
     setSuggesting(false);
@@ -514,48 +554,21 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
         />
       )}
 
-      <div className="transcript" ref={listRef}>
-        {segments.map((s, i) => {
-          const mark = marks.get(i);
-          return (
-            <Fragment key={s.id}>
-              {mark?.first && <PassageLabel mark={mark} />}
-              <div className="seg-row">
-                <button
-                  data-i={i}
-                  className={`seg ${i === player.index && !picking ? "current" : ""} ${i < player.index ? "done" : ""} ${
-                    mark ? `in-drill st-${mark.stage} ${mark.due ? "drill-due" : ""}` : ""
-                  } ${isPicked(i) ? "picked" : ""}`}
-                  onClick={() => (picking ? pick(i) : editing ? player.select(i) : player.playSegment(i))}
-                >
-                  <span className="t">{formatTime(s.start)}</span>
-                  {s.text}
-                  {(() => {
-                    const p = study.phraseAt(i);
-                    return p && study.shownNotes(p).length > 0 ? <span className="note-dot" aria-label="Has notes" /> : null;
-                  })()}
-                </button>
-                {editing && (
-                  <div className="seg-tools">
-                    <button className="btn small" disabled={!!busy} onClick={() => void onSplit(i)} title="Split at the longest pause">
-                      Split
-                    </button>
-                    <button
-                      className="btn small"
-                      disabled={!!busy || i + 1 >= segments.length}
-                      onClick={() => void onMerge(i)}
-                      title="Merge with next phrase"
-                    >
-                      Merge ↓
-                    </button>
-                  </div>
-                )}
-              </div>
-              {mark?.learnedTo && <div className="learned-line">learned up to here</div>}
-            </Fragment>
-          );
-        })}
-      </div>
+      <Transcript
+        listRef={listRef}
+        segments={segments}
+        marks={marks}
+        noted={noted}
+        index={player.index}
+        mode={picking ? "pick" : editing ? "edit" : "play"}
+        picked={picked}
+        busy={!!busy}
+        onPick={pick}
+        onSelect={player.select}
+        onPlay={player.playSegment}
+        onSplit={split}
+        onMerge={merge}
+      />
 
       <div className="dock">
         {(deckDrilling || picking) && !study.enabled ? (
@@ -757,6 +770,73 @@ function Player({ uid, episode, segDoc }: { uid: string; episode: Episode; segDo
     </div>
   );
 }
+
+/**
+ * The episode's phrases. Memoised, with props that stay the same while a phrase plays, so the
+ * whole list isn't redrawn for every step of the progress bar.
+ */
+const Transcript = memo(function Transcript(props: {
+  listRef: React.Ref<HTMLDivElement>;
+  segments: Segment[];
+  marks: ReturnType<typeof transcriptMarks>;
+  /** By phrase: whether it has study notes to show. */
+  noted: boolean[];
+  /** The current phrase. */
+  index: number;
+  /** What a tap on a phrase does. */
+  mode: "pick" | "edit" | "play";
+  picked: readonly [number, number] | null;
+  busy: boolean;
+  onPick: (i: number) => void;
+  onSelect: (i: number) => void;
+  onPlay: (i: number) => void;
+  onSplit: (i: number) => void;
+  onMerge: (i: number) => void;
+}) {
+  const { listRef, segments, marks, index, mode, picked, busy } = props;
+  const onTap = mode === "pick" ? props.onPick : mode === "edit" ? props.onSelect : props.onPlay;
+  return (
+    <div className="transcript" ref={listRef}>
+      {segments.map((s, i) => {
+        const mark = marks.get(i);
+        return (
+          <Fragment key={s.id}>
+            {mark?.first && <PassageLabel mark={mark} />}
+            <div className="seg-row">
+              <button
+                data-i={i}
+                className={`seg ${i === index && mode !== "pick" ? "current" : ""} ${i < index ? "done" : ""} ${
+                  mark ? `in-drill st-${mark.stage} ${mark.due ? "drill-due" : ""}` : ""
+                } ${picked && i >= picked[0] && i <= picked[1] ? "picked" : ""}`}
+                onClick={() => onTap(i)}
+              >
+                <span className="t">{formatTime(s.start)}</span>
+                {s.text}
+                {props.noted[i] && <span className="note-dot" aria-label="Has notes" />}
+              </button>
+              {mode === "edit" && (
+                <div className="seg-tools">
+                  <button className="btn small" disabled={busy} onClick={() => props.onSplit(i)} title="Split at the longest pause">
+                    Split
+                  </button>
+                  <button
+                    className="btn small"
+                    disabled={busy || i + 1 >= segments.length}
+                    onClick={() => props.onMerge(i)}
+                    title="Merge with next phrase"
+                  >
+                    Merge ↓
+                  </button>
+                </div>
+              )}
+            </div>
+            {mark?.learnedTo && <div className="learned-line">learned up to here</div>}
+          </Fragment>
+        );
+      })}
+    </div>
+  );
+});
 
 function SettingsSheet(props: {
   uid: string;

@@ -20,6 +20,15 @@ export function playedSeconds(clock: PlayClock, now: number): number {
   return (clock.playedMs + (clock.since === undefined ? 0 : Math.max(0, now - clock.since))) / 1000;
 }
 
+/** Index of the phrase of a span playing at time `t`: each counts from just before its start. */
+export function phraseIndexAt(phrases: { start: number }[], t: number): number {
+  let found = 0;
+  phrases.forEach((p, i) => {
+    if (p.start - 0.15 <= t) found = i;
+  });
+  return found;
+}
+
 export interface DrillAudioOptions {
   /** Audio URL of each episode the session plays from. */
   sources: Record<string, string>;
@@ -306,8 +315,16 @@ class DrillAudio {
       }
       // The progress display follows animation frames while visible; the end is timed on the
       // audio clock so it still fires with the screen off.
+      // The screen only needs the position to follow a span of several phrases, and then only when
+      // the phrase playing changes: reporting every frame would redraw it sixty times a second.
+      const phrases = this.session.current()?.step.phrases;
+      let shown = -1;
       const tick = () => {
-        this.on.position(el.currentTime);
+        const i = phrases ? phraseIndexAt(phrases, el.currentTime) : shown;
+        if (i !== shown) {
+          shown = i;
+          this.on.position(el.currentTime);
+        }
         if (el.currentTime >= end || el.ended) done();
         else this.raf = requestAnimationFrame(tick);
       };

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Info } from "../components/Info";
 import { PhraseStudySheet } from "../components/PhraseStudySheet";
-import { playedSeconds, useDrillPlayer, type DrillAudioOptions } from "../hooks/useDrillPlayer";
+import { phraseIndexAt, playedSeconds, useDrillPlayer, type DrillAudioOptions } from "../hooks/useDrillPlayer";
 import { useDrillStudy } from "../hooks/useDrillStudy";
 import { useNow } from "../hooks/useDrills";
 import { synthesizeAll } from "../lib/drill/clips";
@@ -215,9 +215,7 @@ function HeldBack({ prepared, now, onLearnAnyway }: { prepared: Prepared; now: n
 
 /** The phrase of a span playing at time `t`. */
 function phraseAt(phrases: SessionPhrase[], t: number): SessionPhrase {
-  let found = phrases[0];
-  for (const p of phrases) if (p.start - 0.15 <= t) found = p;
-  return found;
+  return phrases[phraseIndexAt(phrases, t)];
 }
 
 /**

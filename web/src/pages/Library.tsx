@@ -519,6 +519,7 @@ function EpisodeEditor({
   const [title, setTitle] = useState(ep.title);
   const [folderId, setFolderId] = useState(folders.some((f) => f.id === ep.folderId) ? ep.folderId! : "");
   const [error, setError] = useState<string>();
+  const online = useOnline();
 
   const save = async () => {
     const patch: Partial<Episode> = {};
@@ -563,6 +564,9 @@ function EpisodeEditor({
         </button>
         <button
           className="btn ghost small danger"
+          // Deleting removes files from the server, which can't be queued up for later.
+          disabled={!online}
+          title={online ? undefined : "Deleting needs a connection"}
           onClick={() => {
             if (confirm(`Delete "${ep.title}"? This removes the audio and transcript.`)) {
               void deleteEpisode(uid, ep).then(onStorageChange);

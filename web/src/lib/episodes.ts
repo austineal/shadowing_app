@@ -87,16 +87,27 @@ export function subscribeSegments(
   );
 }
 
+/**
+ * Waits for a Firestore write, but not for long. Its promise settles only once the server has the
+ * write, which offline is never, while the change has applied locally at once and syncs later: so
+ * a screen that waited for it would hang. A refusal that comes back quickly is still thrown.
+ */
+async function applied(write: Promise<void>): Promise<void> {
+  write.catch(() => undefined); // a failure after we've stopped waiting has nowhere to go
+  const wait = typeof navigator !== "undefined" && !navigator.onLine ? 0 : 2000;
+  await Promise.race([write, new Promise<void>((resolve) => setTimeout(resolve, wait))]);
+}
+
 export async function saveSegments(uid: string, episodeId: string, data: Omit<SegmentsDoc, "updatedAt">): Promise<void> {
-  await setDoc(segmentsDoc(uid, episodeId), { ...data, updatedAt: serverTimestamp() });
+  await applied(setDoc(segmentsDoc(uid, episodeId), { ...data, updatedAt: serverTimestamp() }));
 }
 
 export async function updateSegmentList(uid: string, episodeId: string, segments: Segment[]): Promise<void> {
-  await updateDoc(segmentsDoc(uid, episodeId), { segments, updatedAt: serverTimestamp() });
+  await applied(updateDoc(segmentsDoc(uid, episodeId), { segments, updatedAt: serverTimestamp() }));
 }
 
 export async function updateEpisode(uid: string, episodeId: string, patch: Partial<Episode> & Record<string, unknown>): Promise<void> {
-  await updateDoc(episodeDoc(uid, episodeId), { ...patch, updatedAt: serverTimestamp() });
+  await applied(updateDoc(episodeDoc(uid, episodeId), { ...patch, updatedAt: serverTimestamp() }));
 }
 
 export async function saveEpisodeSettings(uid: string, episodeId: string, settings: PracticeSettings): Promise<void> {
@@ -311,7 +322,10 @@ const importEpisodeFn = httpsCallable<
   { audioUrl: string; title: string; guid?: string; language: string; feedTitle?: string; feedUrl?: string; folderId?: string | null },
   { episodeId: string }
 >(functions, "importEpisode");
-const retranscribeFn = httpsCallable<{ episodeId: string }, { status: string; error: string | null }>(functions, "retranscribeEpisode");
+// Runs the whole transcription before answering, which takes minutes: far past the default 70 s.
+const retranscribeFn = httpsCallable<{ episodeId: string }, { status: string; error: string | null }>(functions, "retranscribeEpisode", {
+  timeout: 540_000,
+});
 
 export async function fetchFeed(url: string): Promise<FeedResult> {
   return (await fetchFeedFn({ url })).data;
