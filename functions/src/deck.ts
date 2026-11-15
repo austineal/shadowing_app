@@ -12,7 +12,7 @@ import { randomUUID } from "node:crypto";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { FieldValue } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
-import { db, bucket } from "./admin.js";
+import { db, bucket, claimIsStale } from "./admin.js";
 import { REGION } from "./config.js";
 import { assertAllowed } from "./auth.js";
 import { startDeckStudy } from "./study.js";
@@ -192,7 +192,9 @@ export const buildDeck = onCall({ region: REGION, memory: "2GiB", cpu: 2, timeou
 
   const claimed = await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
-    if (!snap.exists || snap.get("kind") !== "deck" || !CLAIMABLE.has(snap.get("status"))) return false;
+    if (!snap.exists || snap.get("kind") !== "deck") return false;
+    const status = snap.get("status");
+    if (!CLAIMABLE.has(status) && !(status === "transcribing" && claimIsStale(snap.get("updatedAt")))) return false;
     tx.update(ref, { status: "transcribing", error: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp() });
     return true;
   });

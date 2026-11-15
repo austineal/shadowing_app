@@ -6,31 +6,17 @@
  */
 import * as ort from "onnxruntime-web/wasm";
 import { createPiperPhonemize, type PiperPhonemizeModule } from "./phonemize.js";
+import { VOICE_CACHE, voiceModelUrl, type ProgressFn } from "./voices";
 
 /** Must match the onnxruntime-web version in package.json. */
 const ORT_WASM_BASE = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/";
 const PHONEMIZE_BASE = "https://cdn.jsdelivr.net/npm/@diffusionstudio/piper-wasm@1.0.0/build/piper_phonemize";
-const VOICES_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/main";
-export const VOICE_CACHE = "piper-voices";
 
 interface VoiceConfig {
   audio: { sample_rate: number };
   espeak: { voice: string };
   inference: { noise_scale: number; length_scale: number; noise_w: number };
   num_speakers: number;
-}
-
-export type ProgressFn = (loaded: number, total: number) => void;
-
-/** e.g. en_GB-alba-medium -> en/en_GB/alba/medium/en_GB-alba-medium */
-function voicePath(voiceId: string): string {
-  const [locale, name, quality] = voiceId.split("-");
-  return `${locale.split("_")[0]}/${locale}/${name}/${quality}/${voiceId}`;
-}
-
-/** URL of a voice's .onnx model (its config is the same URL plus .json). Also its cache key. */
-export function voiceModelUrl(voiceId: string): string {
-  return `${VOICES_BASE}/${voicePath(voiceId)}.onnx`;
 }
 
 async function fetchCached(url: string, onProgress?: ProgressFn): Promise<Response> {

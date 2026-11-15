@@ -3,7 +3,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { randomUUID } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import * as logger from "firebase-functions/logger";
-import { db, bucket } from "./admin.js";
+import { db, bucket, claimIsStale } from "./admin.js";
 import { REGION, elevenLabsApiKey, scribeModelId } from "./config.js";
 import { transcribeAudio } from "./elevenlabs.js";
 import { isVbrMp3, toCbrMp3 } from "./audio.js";
@@ -32,7 +32,7 @@ async function runTranscription(uid: string, episodeId: string): Promise<void> {
     const snap = await tx.get(ref);
     if (!snap.exists) return null;
     const data = snap.data()!;
-    if (!CLAIMABLE.has(data.status)) return null;
+    if (!CLAIMABLE.has(data.status) && !(data.status === "transcribing" && claimIsStale(data.updatedAt))) return null;
     tx.update(ref, {
       status: "transcribing",
       error: FieldValue.delete(),
@@ -182,7 +182,7 @@ export const retranscribeEpisode = onCall(
     if (typeof data.audioPath !== "string") {
       throw new HttpsError("failed-precondition", "Episode has no audio.");
     }
-    if (data.status === "transcribing") {
+    if (data.status === "transcribing" && !claimIsStale(data.updatedAt)) {
       throw new HttpsError("failed-precondition", "Transcription already in progress.");
     }
     // Allow re-running even from 'ready' so a language change can be applied.
