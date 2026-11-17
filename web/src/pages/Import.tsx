@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { FolderSelect } from "../components/FolderSelect";
 import { ShowMore } from "../components/ShowMore";
 import { usePaged } from "../hooks/usePaged";
@@ -7,17 +7,21 @@ import { useEpisodes } from "../hooks/useEpisode";
 import { LanguageSelect } from "../components/LanguageSelect";
 import { Info } from "../components/Info";
 import { useFolders, useSubscriptions } from "../hooks/useLibrary";
-import { fetchFeed, importFeedEpisode, uploadEpisode, type FeedEpisode, type FeedResult } from "../lib/episodes";
+import { fetchFeed, importFeedEpisode, importText, uploadEpisode, type FeedEpisode, type FeedResult } from "../lib/episodes";
 import { subscribe } from "../lib/library";
 import { ROLE_LABEL, guessColumns, hasHeader, parseCsv, readCards, uploadDeck, type Columns, type Role } from "../lib/deck";
 import { formatDuration, titleFromFilename } from "../lib/format";
+import { languageLabel } from "../lib/languages";
 import { importedLookup } from "../lib/organise";
 import { loadRecentFeeds, rememberFeed } from "../lib/settings";
 
 const LANG_KEY = "shadowing.lastLanguage";
 
 export default function Import({ uid }: { uid: string }) {
-  const [tab, setTab] = useState<"upload" | "feed" | "deck">("feed");
+  // Text shared from another app (the manifest's share_target). Some apps send only a link.
+  const [params] = useSearchParams();
+  const shared = params.get("text") || params.get("url") || "";
+  const [tab, setTab] = useState<"upload" | "feed" | "deck" | "text">(shared ? "text" : "feed");
   const [language, setLanguage] = useState(() => localStorage.getItem(LANG_KEY) ?? "fr");
   useEffect(() => localStorage.setItem(LANG_KEY, language), [language]);
   const { folders } = useFolders(uid);
@@ -40,6 +44,9 @@ export default function Import({ uid }: { uid: string }) {
         </button>
         <button className={tab === "deck" ? "active" : ""} onClick={() => setTab("deck")}>
           Card deck
+        </button>
+        <button className={tab === "text" ? "active" : ""} onClick={() => setTab("text")}>
+          Text
         </button>
       </div>
       <div className="section">
@@ -66,6 +73,8 @@ export default function Import({ uid }: { uid: string }) {
         )}
         {tab === "upload" ? (
           <UploadForm uid={uid} language={language} folderId={folderId || null} />
+        ) : tab === "text" ? (
+          <TextForm language={language} folderId={folderId || null} initialText={shared} initialTitle={params.get("title") ?? ""} />
         ) : tab === "deck" ? (
           <DeckForm uid={uid} language={language} folderId={folderId || null} />
         ) : (
@@ -160,6 +169,92 @@ function UploadForm({ uid, language, folderId }: { uid: string; language: string
       {error && <p className="error small" style={{ marginBottom: 10 }}>{error}</p>}
       <button className="btn primary" disabled={!file || progress !== null} onClick={() => void submit()}>
         Upload and transcribe
+      </button>
+    </div>
+  );
+}
+
+/** Match MAX_TEXT_CHARS and the VOICES table in functions/src/text.ts. */
+const MAX_TEXT_CHARS = 20_000;
+const TTS_LANGUAGES = new Set(["no", "fr", "cy", "ja"]);
+
+/** Text with no recording: ElevenLabs reads it aloud, then it's practised like any episode. */
+function TextForm({
+  language,
+  folderId,
+  initialText,
+  initialTitle,
+}: {
+  language: string;
+  folderId: string | null;
+  initialText: string;
+  initialTitle: string;
+}) {
+  const nav = useNavigate();
+  const [text, setText] = useState(initialText);
+  const [title, setTitle] = useState(initialTitle);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const tooLong = text.trim().length > MAX_TEXT_CHARS;
+  const hasVoice = TTS_LANGUAGES.has(language);
+
+  const submit = async () => {
+    setError(undefined);
+    setBusy(true);
+    try {
+      const id = await importText({ text, title: title || text.trim().split("\n")[0].slice(0, 60), language, folderId });
+      nav(`/episode/${id}`, { replace: true });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="field">
+        <div className="row">
+          <label>
+            Text
+            <Info>The text is read aloud by an AI voice (ElevenLabs), then practised like any other episode.</Info>
+          </label>
+          <span className="spacer" />
+          <button className="btn ghost small" onClick={() => fileRef.current?.click()}>
+            Load .txt
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".txt,text/plain"
+            hidden
+            onChange={async (e) => {
+              const f = e.target.files?.[0];
+              if (!f) return;
+              setText(await f.text());
+              if (!title) setTitle(titleFromFilename(f.name));
+            }}
+          />
+        </div>
+        <textarea className="input" rows={10} value={text} onChange={(e) => setText(e.target.value)} placeholder="Paste the text to practise." />
+        <span className={`small ${tooLong ? "error" : "muted"}`}>
+          {text.trim().length.toLocaleString()} / {MAX_TEXT_CHARS.toLocaleString()} characters
+        </span>
+      </div>
+      <div className="field">
+        <label>Title</label>
+        <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Episode title" />
+      </div>
+      {!hasVoice && (
+        <p className="small muted">
+          Text import isn't available for {language === "auto" ? "auto-detect" : languageLabel(language)} yet: it needs a voice chosen for
+          that language. Available for {[...TTS_LANGUAGES].map(languageLabel).join(", ")}.
+        </p>
+      )}
+      {busy && <p className="small muted">Creating the audio… this can take a minute or two for long texts.</p>}
+      {error && <p className="error small" style={{ marginBottom: 10 }}>{error}</p>}
+      <button className="btn primary" disabled={!text.trim() || tooLong || busy || !hasVoice} onClick={() => void submit()}>
+        {busy ? <span className="spinner" style={{ width: 16, height: 16 }} /> : "Create audio and transcribe"}
       </button>
     </div>
   );

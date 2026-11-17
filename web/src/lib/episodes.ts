@@ -327,6 +327,17 @@ const retranscribeFn = httpsCallable<{ episodeId: string }, { status: string; er
   timeout: 540_000,
 });
 
+// Waits for ElevenLabs to read the whole text aloud, which can take minutes.
+const importTextFn = httpsCallable<
+  { text: string; title: string; language: string; folderId?: string | null },
+  { episodeId: string }
+>(functions, "importText", { timeout: 540_000 });
+
+/** Creates an episode whose audio is the text read aloud; it is then transcribed like an upload. */
+export async function importText(params: { text: string; title: string; language: string; folderId?: string | null }): Promise<string> {
+  return (await importTextFn(params)).data.episodeId;
+}
+
 export async function fetchFeed(url: string): Promise<FeedResult> {
   return (await fetchFeedFn({ url })).data;
 }

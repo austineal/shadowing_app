@@ -9,7 +9,8 @@ export interface Episode {
   language: string;
   status: EpisodeStatus;
   error?: string;
-  source: "upload" | "rss";
+  /** "text": imported as text and read aloud by ElevenLabs (see importText). */
+  source: "upload" | "rss" | "text";
   /** "deck": a deck of audio flashcards joined into one audio file, a card per segment (see buildDeck). */
   kind?: "deck";
   cardCount?: number;
