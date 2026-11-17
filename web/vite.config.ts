@@ -18,6 +18,8 @@ export default defineConfig({
         display: "standalone",
         orientation: "portrait",
         start_url: "/",
+        // Android's share sheet: shared text opens the Import page's Text tab, filled in.
+        share_target: { action: "/import", method: "GET", params: { title: "title", text: "text", url: "url" } },
         icons: [
           { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
           { src: "/icon-512.png", sizes: "512x512", type: "image/png" },

@@ -3,3 +3,4 @@ export { fetchFeed, importEpisode } from "./rss.js";
 export { prepareStudy, studyChunk, explainPhrase } from "./study.js";
 export { suggestExcerpts, planDrillPassages } from "./drill.js";
 export { buildDeck } from "./deck.js";
+export { importText } from "./text.js";

@@ -19,3 +19,10 @@ export const claudeModelId = defineString("CLAUDE_MODEL_ID", {
   default: "claude-opus-5-5",
   description: "Claude model id for translations and study notes",
 });
+
+/** ElevenLabs text-to-speech model for text imports. v4 covers 90+ languages (Welsh included). */
+export const ttsModelId = defineString("TTS_MODEL_ID", {
+  default: "eleven_v4",
+  description: "ElevenLabs text-to-speech model id",
+});
+
