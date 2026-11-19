@@ -27,7 +27,7 @@ import {
   uploadString,
 } from "firebase/storage";
 import { httpsCallable } from "firebase/functions";
-import { db, functions, storage } from "../firebase";
+import { auth, db, functions, storage } from "../firebase";
 import {
   cacheAudio,
   cachedText,
@@ -121,6 +121,8 @@ interface UploadParams {
   folderId?: string | null;
   transcriptText?: string;
   onProgress?: (fraction: number) => void;
+  /** Extra episode fields, e.g. feed details when the browser downloaded a feed episode itself. */
+  extra?: Record<string, unknown>;
 }
 
 function extensionOf(file: File): string {
@@ -154,6 +156,7 @@ export async function uploadEpisode(uid: string, params: UploadParams): Promise<
     audioPath,
     ...(videoPath ? { videoPath } : {}),
     ...(transcriptPath ? { transcriptPath } : {}),
+    ...params.extra,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -351,7 +354,31 @@ export async function importFeedEpisode(params: {
   feedUrl?: string;
   folderId?: string | null;
 }): Promise<string> {
-  return (await importEpisodeFn(params)).data.episodeId;
+  try {
+    return (await importEpisodeFn(params)).data.episodeId;
+  } catch (err) {
+    // Some hosts (e.g. NRK's CDN) refuse Google Cloud's IPs but serve browsers, with open CORS.
+    // Then the browser downloads the file and uploads it like a local file.
+    const uid = auth.currentUser?.uid;
+    if (!uid || !/Audio URL returned HTTP 4\d\d/.test(String((err as Error)?.message))) throw err;
+    const res = await fetch(params.audioUrl).catch(() => null);
+    if (!res?.ok) throw err;
+    const blob = await res.blob();
+    const name = new URL(params.audioUrl).pathname.split("/").pop() || "episode.mp3";
+    return uploadEpisode(uid, {
+      file: new File([blob], name, { type: blob.type }),
+      title: params.title,
+      language: params.language,
+      folderId: params.folderId,
+      extra: {
+        source: "rss",
+        sourceUrl: params.audioUrl,
+        guid: params.guid ?? null,
+        feedTitle: params.feedTitle ?? null,
+        feedUrl: params.feedUrl ?? null,
+      },
+    });
+  }
 }
 
 export async function retranscribe(episodeId: string): Promise<{ status: string; error: string | null }> {
