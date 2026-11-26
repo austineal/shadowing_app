@@ -61,7 +61,7 @@ export function ExcerptSuggestionsSheet(props: {
   const pace = weeklyPace(
     schedule,
     (sessions ?? []).filter((l) => drillScheduleKey(l, prefs) === key),
-    drillOptions(schedule.learning, loadDefaultSettings(), schedule.answerTime ?? 0),
+    drillOptions(schedule.plays, loadDefaultSettings(), schedule.answerTime ?? 0),
     now,
   );
   const minutes = excerptMinutes(pace);

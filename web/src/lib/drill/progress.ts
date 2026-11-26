@@ -5,17 +5,15 @@
 import type { Drill } from "../../types";
 import { frontier } from "./plan";
 import { isDue, isLearned } from "./srs";
+import { levelStage, SOLID_LEVEL } from "./steps";
 
 /** A passage's stage: not started, partly learned, then by level once learned. */
 type PassageStage = "new" | "learning" | "fresh" | "growing" | "solid";
 
-/** From this level a passage counts as solid: it was still there after a week away. */
-const SOLID_LEVEL = 4;
-
 export function passageStage(drill: Drill, i: number): PassageStage {
   const level = drill.passages[i].level;
   if (level === undefined) return drill.learning?.passage === i && drill.learning.phrases > 0 ? "learning" : "new";
-  return level >= SOLID_LEVEL ? "solid" : level >= 2 ? "growing" : "fresh";
+  return levelStage(level);
 }
 
 export const STAGE_LABEL: Record<PassageStage, string> = {

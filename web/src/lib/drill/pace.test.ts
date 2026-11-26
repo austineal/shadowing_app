@@ -4,8 +4,8 @@ import { drillOptions } from "./steps";
 import type { DrillSchedule, DrillSessionLog } from "../../types";
 
 const base = { paddingMs: 120, gapFactor: 1.3 };
-const full = drillOptions("full", base);
-const light = drillOptions("light", base);
+const full = drillOptions({ learning: 3, fresh: 1, growing: 1, solid: 1 }, base);
+const light = drillOptions({ learning: 2, fresh: 1, growing: 1, solid: 1 }, base);
 const DAY = 86_400_000;
 const now = new Date(2026, 9, 1, 12).getTime();
 
@@ -14,7 +14,6 @@ const schedule = (patch: Partial<DrillSchedule>): DrillSchedule => ({
   everyDays: 1,
   minutes: 30,
   newMaterial: true,
-  learning: "full",
   ...patch,
 });
 const log = (daysAgo: number, learnedSeconds?: number): DrillSessionLog => ({
@@ -41,7 +40,7 @@ describe("weeklyPace", () => {
   it("estimates from the schedule, sizing excerpts to about two weeks", () => {
     const japanese = weeklyPace(schedule({ perDay: 2, minutes: 30 }), [], full, now);
     const welsh = weeklyPace(schedule({ minutes: 30 }), [], full, now);
-    const french = weeklyPace(schedule({ everyDays: 2, minutes: 20, learning: "light" }), [], light, now);
+    const french = weeklyPace(schedule({ everyDays: 2, minutes: 20 }), [], light, now);
     expect(japanese.measured).toBe(false);
     expect(japanese.perWeek).toBeCloseTo(welsh.perWeek * 2);
     // Roughly what the load model found: minutes of new audio a week.

@@ -14,6 +14,7 @@ import {
   hasEnglish,
   leadInSteps,
   learnSteps,
+  playsAt,
   repeatSteps,
   shadowSteps,
   stepsSeconds,
@@ -99,7 +100,9 @@ const slackOf = (block: Block, idx: number[], attempt = 0) => Math.max(0, ...idx
 
 function testUnit(block: Block, idx: number[], graded: boolean, opts: DrillOptions): Unit {
   const ps = idx.map((i) => block.phrases[i]);
-  return { kind: "test", steps: testSteps(block.episodeId, ps, levelOf(block), opts, slackOf(block, idx)), test: { phrases: idx, graded, attempt: 0 } };
+  // Reviews play the answer as often as the stage asks; while learning, the listen-and-repeat plays already did.
+  const plays = block.kind === "review" ? playsAt(opts, block.level) : 1;
+  return { kind: "test", steps: testSteps(block.episodeId, ps, levelOf(block), opts, slackOf(block, idx), plays), test: { phrases: idx, graded, attempt: 0 } };
 }
 
 /**
@@ -113,7 +116,7 @@ function fixupUnit(block: Block, missed: Unit, opts: DrillOptions): Unit {
   const repeat =
     block.kind === "review" && ps.length > 1
       ? ps.flatMap((p) => repeatSteps(block.episodeId, [p], opts, 1))
-      : repeatSteps(block.episodeId, ps, opts);
+      : repeatSteps(block.episodeId, ps, opts, playsAt(opts, levelOf(block)), true);
   return {
     kind: "fixup",
     steps: [...repeat, ...testSteps(block.episodeId, ps, levelOf(block), opts, slackOf(block, idx, attempt))],
@@ -186,7 +189,7 @@ export function blockUnits(block: Block, opts: DrillOptions): Unit[] {
   if (block.kind === "review" && block.cards) {
     for (const i of testOrder(block)) {
       const p = block.phrases[i];
-      units.push(canCue(p) ? testUnit(block, [i], true, opts) : { kind: "listen", steps: repeatSteps(block.episodeId, [p], opts, 1) });
+      units.push(canCue(p) ? testUnit(block, [i], true, opts) : { kind: "listen", steps: repeatSteps(block.episodeId, [p], opts, playsAt(opts, block.level)) });
     }
     return units;
   }
@@ -194,7 +197,7 @@ export function blockUnits(block: Block, opts: DrillOptions): Unit[] {
     for (const g of cueGroups(block.phrases, cueSize(block.level))) {
       const p = block.phrases[g[0]];
       // A phrase without English can't be tested, so it's just heard and repeated.
-      units.push(canCue(p) ? testUnit(block, g, true, opts) : { kind: "listen", steps: repeatSteps(block.episodeId, [p], opts, 1) });
+      units.push(canCue(p) ? testUnit(block, g, true, opts) : { kind: "listen", steps: repeatSteps(block.episodeId, [p], opts, playsAt(opts, block.level)) });
     }
     units.push(...shadowUnits(block));
     return units;
@@ -307,7 +310,9 @@ export class DrillSession {
     const cur = this.current();
     if (!cur) return false;
     if (this.lateTarget()) return true;
-    return !!cur.unit.test && (cur.step.cue === "english" || cur.step.cue === "speak" || cur.step.cue === "answer");
+    const cue = cur.step.cue;
+    // A test's own repeat pauses come between plays of its answer (a fix-up's come before its test).
+    return !!cur.unit.test && (cue === "english" || cue === "speak" || cue === "answer" || (cue === "repeat" && cur.unit.kind === "test"));
   }
 
   /**

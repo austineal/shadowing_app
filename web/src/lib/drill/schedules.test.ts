@@ -7,7 +7,6 @@ const schedule = (patch: Partial<DrillSchedule> = {}): DrillSchedule => ({
   everyDays: 1,
   minutes: 20,
   newMaterial: true,
-  learning: "full",
   ...patch,
 });
 const prefs: DrillPrefs = {

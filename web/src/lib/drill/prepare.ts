@@ -48,7 +48,7 @@ export function drillVoice(prefs: DrillPrefs | undefined): string {
 
 /** How a language's drills play: its learning style and answer time, with the player's pauses and padding. */
 export function scheduleOptions(schedule: DrillSchedule): DrillOptions {
-  return drillOptions(schedule.learning, loadDefaultSettings(), schedule.answerTime ?? 0);
+  return drillOptions(schedule.plays, loadDefaultSettings(), schedule.answerTime ?? 0);
 }
 
 interface PrepareOptions {

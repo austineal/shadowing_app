@@ -22,7 +22,7 @@ export function frequencyOf(s: DrillSchedule): (typeof FREQUENCIES)[number] {
 export const SESSION_MINUTES = [10, 15, 20, 25, 30, 40, 45, 60];
 
 /** A new language's schedule until the learner changes it. */
-export const DEFAULT_SCHEDULE: DrillSchedule = { perDay: 1, everyDays: 1, minutes: 20, newMaterial: true, learning: "full" };
+export const DEFAULT_SCHEDULE: DrillSchedule = { perDay: 1, everyDays: 1, minutes: 20, newMaterial: true };
 
 export const CUE_LABEL: Record<Cue, string> = {
   announce: "Next",

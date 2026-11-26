@@ -25,12 +25,12 @@ describe("testSteps", () => {
   it("uses the language's extra answer time for the speaking pause", () => {
     const base = { paddingMs: 0, gapFactor: 1.3 };
     const p = { start: 0, end: 4, text: "x", english: "y" };
-    const pause = (extra: number) => testSteps("ep", [p], 0, drillOptions("full", base, extra)).find((s) => s.cue === "speak")!.play;
+    const pause = (extra: number) => testSteps("ep", [p], 0, drillOptions({ learning: 3, fresh: 1, growing: 1, solid: 1 }, base, extra)).find((s) => s.cue === "speak")!.play;
     expect(pause(0)).toEqual({ kind: "silence", sec: 8 });
     expect(pause(3)).toEqual({ kind: "silence", sec: 11 });
   });
   it("eases a cue that keeps being missed: longer pause, slower answer, up to a limit", () => {
-    const opts = drillOptions("full", { paddingMs: 0, gapFactor: 1.3 });
+    const opts = drillOptions({ learning: 3, fresh: 1, growing: 1, solid: 1 }, { paddingMs: 0, gapFactor: 1.3 });
     const p = { start: 0, end: 4, text: "x", english: "y" };
     const at = (slack: number) => {
       const steps = testSteps("ep", [p], 0, opts, slack);
@@ -43,7 +43,7 @@ describe("testSteps", () => {
     expect(at(3)[1]).toMatchObject({ rate: 0.75 });
   });
   it("leaves two seconds after the answer to press Missed", () => {
-    const steps = testSteps("ep", [{ start: 0, end: 4, text: "x", english: "y" }], 0, drillOptions("full", { paddingMs: 0, gapFactor: 1 }));
+    const steps = testSteps("ep", [{ start: 0, end: 4, text: "x", english: "y" }], 0, drillOptions({ learning: 3, fresh: 1, growing: 1, solid: 1 }, { paddingMs: 0, gapFactor: 1 }));
     expect(steps[steps.length - 1]).toMatchObject({ cue: "answer", play: { kind: "silence", sec: 2 } });
   });
 });
@@ -52,7 +52,7 @@ describe("announceSteps", () => {
   it("plays a chime and the words, then pauses, showing the words without the full stop", () => {
     const steps = announceSteps("Now shadow along.");
     expect(steps.map((s) => s.label)).toEqual(["Now shadow along", "Now shadow along"]);
-    const opts = drillOptions("full", { paddingMs: 0, gapFactor: 1 });
+    const opts = drillOptions({ learning: 3, fresh: 1, growing: 1, solid: 1 }, { paddingMs: 0, gapFactor: 1 });
     expect(stepsSeconds(steps, opts)).toBeCloseTo(ANNOUNCE_CHIME_SEC + englishSeconds("Now shadow along.") + 0.5);
   });
 });

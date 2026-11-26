@@ -13,7 +13,7 @@ import {
 } from "./session";
 import { ANNOUNCE, drillOptions, type SessionPhrase } from "./steps";
 
-const opts = drillOptions("full", { paddingMs: 120, gapFactor: 1.3 });
+const opts = drillOptions({ learning: 3, fresh: 1, growing: 1, solid: 1 }, { paddingMs: 120, gapFactor: 1.3 });
 const phrase = (i: number, english = true): SessionPhrase => ({
   start: i * 8,
   end: i * 8 + 7,
@@ -74,7 +74,7 @@ const missFirstTry = (i: number) => (cur: Current) =>
 
 describe("slack", () => {
   it("gives a missed cue's retry more time, and a block's eased phrases more from the start", () => {
-    const opts = drillOptions("light", { paddingMs: 0, gapFactor: 1.3 });
+    const opts = drillOptions({ learning: 2, fresh: 1, growing: 1, solid: 1 }, { paddingMs: 0, gapFactor: 1.3 });
     const phrases = [0, 1].map((i) => ({ start: i * 4, end: i * 4 + 4, text: `t${i}`, english: `e${i}` }));
     const block: Block = { kind: "review", drillId: "d", episodeId: "ep", title: "", passage: 0, passageCount: 1, phrases, level: 0, slack: [0, 2] };
     const s = new DrillSession([block], opts, () => {});
@@ -106,12 +106,23 @@ describe("DrillSession: review", () => {
     expect(events).toEqual([expect.objectContaining({ kind: "reviewed", misses: 0, passed: true })]);
   });
 
+  it("plays a review's answer as often as its stage asks, and a miss between plays still counts", () => {
+    const fresh = drillOptions(undefined, { paddingMs: 120, gapFactor: 1.3 }); // just learned: 3 plays
+    const events: SessionEvent[] = [];
+    const session = new DrillSession([review()], fresh, (e) => events.push(e));
+    const log = run(session, (cur) => cur.unit.kind === "test" && cur.step.cue === "repeat" && cur.unit.test!.phrases[0] === 2);
+    expect(log.slice(log.indexOf("test:speak"), log.indexOf("test:speak") + 7)).toEqual([
+      ...["test:speak", "test:answer", "test:repeat", "test:answer", "test:repeat", "test:answer", "test:answer"],
+    ]);
+    expect(events).toEqual([expect.objectContaining({ kind: "reviewed", misses: 1 })]);
+  });
+
   it("jumps to the answer on a miss, then fixes the phrase with repeats and a retry", () => {
     const { session, events } = start([review()]);
     const log = run(session, missFirstTry(2));
     const fixup = log.filter((s) => s.startsWith("fixup:"));
     expect(fixup).toEqual([
-      ...["fixup:listen", "fixup:repeat", "fixup:listen", "fixup:repeat", "fixup:listen", "fixup:repeat"],
+      ...["fixup:listen", "fixup:repeat"], // as often as the stage plays (once, here)
       ...["fixup:english", "fixup:speak", "fixup:answer", "fixup:answer"],
     ]);
     // The missed test skipped its speaking pause.

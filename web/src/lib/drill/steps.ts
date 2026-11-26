@@ -42,32 +42,55 @@ export interface DrillOptions {
   paddingSec: number;
   /** Pause to repeat in, as a multiple of the phrase's played length. */
   gapFactor: number;
-  /** Listen-and-repeat plays of each new phrase (and of a missed one). */
-  repeats: number;
-  /** How many of those plays are slowed down. */
-  slowPlays: number;
+  /** How many times a phrase plays at each stage: listen-and-repeat plays while learning, answer plays in reviews. */
+  plays: Record<PlayStage, number>;
   slowRate: number;
   /** Extra time to answer after each English cue, on top of the pause sized to the phrase. */
   answerExtraSec: number;
 }
 
-/** Speed of the slowed listen-and-repeat plays in the full learning drill. */
+/** A phrase's stage, which sets how often it plays: being learned, then by review level. */
+export type PlayStage = "learning" | "fresh" | "growing" | "solid";
+
+/** From this level a passage counts as solid: it was still there after a week away. */
+export const SOLID_LEVEL = 4;
+
+/** A level's stage; -1 is being learned. */
+export function levelStage(level: number): PlayStage {
+  return level < 0 ? "learning" : level >= SOLID_LEVEL ? "solid" : level >= 2 ? "growing" : "fresh";
+}
+
+export const DEFAULT_PLAYS: Record<PlayStage, number> = { learning: 5, fresh: 3, growing: 2, solid: 1 };
+export const PLAY_STAGES = Object.keys(DEFAULT_PLAYS) as PlayStage[];
+export const MAX_PLAYS = 10;
+const clampPlays = (n: number | undefined, fallback: number) =>
+  Number.isFinite(n) ? Math.max(1, Math.min(MAX_PLAYS, Math.round(n!))) : fallback;
+
+/** Speed of the slowed listen-and-repeat plays (the first two, when a phrase plays more than twice). */
 const SLOW_RATE = 0.75;
+const SLOW_PLAYS = 2;
 
 export function drillOptions(
-  style: "full" | "light",
+  plays: Partial<Record<PlayStage, number>> | undefined,
   base: { paddingMs: number; gapFactor: number },
   answerExtraSec = 0,
 ): DrillOptions {
   return {
     paddingSec: base.paddingMs / 1000,
     gapFactor: base.gapFactor,
-    repeats: style === "full" ? 3 : 2,
-    slowPlays: style === "full" ? 2 : 0,
+    plays: {
+      learning: clampPlays(plays?.learning, DEFAULT_PLAYS.learning),
+      fresh: clampPlays(plays?.fresh, DEFAULT_PLAYS.fresh),
+      growing: clampPlays(plays?.growing, DEFAULT_PLAYS.growing),
+      solid: clampPlays(plays?.solid, DEFAULT_PLAYS.solid),
+    },
     slowRate: SLOW_RATE,
     answerExtraSec: Math.max(0, answerExtraSec),
   };
 }
+
+/** How many times a phrase at `level` plays (-1: being learned). */
+export const playsAt = (opts: DrillOptions, level: number) => opts.plays[levelStage(level)];
 
 /** A short breath between steps. */
 const BEAT_SEC = 1.0;
@@ -115,12 +138,13 @@ function englishPlay(episodeId: string, p: SessionPhrase): Play {
     : { kind: "english", text: p.english ?? "" };
 }
 
-/** Listen and repeat, `plays` times; the first `slowPlays` are slowed. */
-export function repeatSteps(episodeId: string, ps: SessionPhrase[], opts: DrillOptions, plays = opts.repeats): Step[] {
+/** Listen and repeat, `plays` times; when `slowed`, the first two are slowed if there are more than two. */
+export function repeatSteps(episodeId: string, ps: SessionPhrase[], opts: DrillOptions, plays: number, slowed = false): Step[] {
   const steps: Step[] = [];
   const text = textOf(ps);
+  const slow = slowed && plays > SLOW_PLAYS ? SLOW_PLAYS : 0;
   for (let n = 1; n <= plays; n++) {
-    const rate = n <= opts.slowPlays ? opts.slowRate : 1;
+    const rate = n <= slow ? opts.slowRate : 1;
     steps.push({ play: source(episodeId, ps, rate), cue: "listen", text });
     steps.push({ play: { kind: "silence", sec: Math.max(0.8, (duration(ps) / rate) * opts.gapFactor) }, cue: "repeat", text });
   }
@@ -134,15 +158,16 @@ export function learnSteps(episodeId: string, p: SessionPhrase, opts: DrillOptio
     steps.push({ play: englishPlay(episodeId, p), cue: "english", text: p.text, english: p.english });
     steps.push({ play: { kind: "silence", sec: BEAT_SEC }, cue: "listen", text: p.text });
   }
-  return [...steps, ...repeatSteps(episodeId, [p], opts)];
+  return [...steps, ...repeatSteps(episodeId, [p], opts, opts.plays.learning, true)];
 }
 
 /**
  * The English of one or more consecutive phrases, time to say them, then the original as the
  * answer. The text stays hidden until the answer plays; an answer of several phrases is shown a
- * phrase at a time as it plays, then whole. `slack` eases a cue that keeps being missed.
+ * phrase at a time as it plays, then whole. `slack` eases a cue that keeps being missed. The answer
+ * plays `answerPlays` times, with a pause to repeat it after each but the last.
  */
-export function testSteps(episodeId: string, ps: SessionPhrase[], level: number, opts: DrillOptions, slack = 0): Step[] {
+export function testSteps(episodeId: string, ps: SessionPhrase[], level: number, opts: DrillOptions, slack = 0, answerPlays = 1): Step[] {
   const english = ps.map((p) => p.english ?? "").join(" ");
   const steps: Step[] = [];
   ps.forEach((p, i) => {
@@ -151,7 +176,11 @@ export function testSteps(episodeId: string, ps: SessionPhrase[], level: number,
   });
   const text = textOf(ps);
   steps.push({ play: { kind: "silence", sec: speakSeconds(duration(ps), level, opts.answerExtraSec) * slackPause(slack) }, cue: "speak", english });
-  steps.push({ play: source(episodeId, ps, slackRate(slack)), cue: "answer", text, english, ...(ps.length > 1 ? { phrases: ps } : {}) });
+  const rate = slackRate(slack);
+  for (let n = 1; n <= answerPlays; n++) {
+    if (n > 1) steps.push({ play: { kind: "silence", sec: Math.max(0.8, (duration(ps) / rate) * opts.gapFactor) }, cue: "repeat", text, english });
+    steps.push({ play: source(episodeId, ps, rate), cue: "answer", text, english, ...(ps.length > 1 ? { phrases: ps } : {}) });
+  }
   steps.push({ play: { kind: "silence", sec: GRACE_SEC }, cue: "answer", text, english });
   return steps;
 }
