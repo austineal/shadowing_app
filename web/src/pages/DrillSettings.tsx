@@ -8,7 +8,8 @@ import { useEpisodes } from "../hooks/useEpisode";
 import { useDrillPrefs, useDrills, useNow, useRecentSessions } from "../hooks/useDrills";
 import { pickAnchorDay } from "../lib/drill/cadence";
 import { DEFAULT_SCHEDULE, FREQUENCIES, SESSION_MINUTES, frequencyOf } from "../lib/drill/labels";
-import { formatProgress, progressOf } from "../lib/drill/progress";
+import { STAGE_LABEL, formatProgress, progressOf } from "../lib/drill/progress";
+import { DEFAULT_PLAYS, MAX_PLAYS, PLAY_STAGES } from "../lib/drill/steps";
 import { dayNumber } from "../lib/drill/srs";
 import { drillVoice } from "../lib/drill/prepare";
 import { drillScheduleKey, newScheduleKey, scheduleLabel, scheduleLanguage, schedulesOf } from "../lib/drill/schedules";
@@ -244,13 +245,21 @@ function ScheduleFields({ schedule, others, save }: { schedule: DrillSchedule; o
           ))}
         </select>
       </label>
-      <label className="field-row">
-        <span>Learning drill</span>
-        <select className="input" value={schedule.learning} onChange={(e) => set({ learning: e.target.value as DrillSchedule["learning"] })}>
-          <option value="full">Full: 3 plays, slowed</option>
-          <option value="light">Light: 2 plays</option>
-        </select>
-      </label>
+      {PLAY_STAGES.map((stage) => {
+        const n = schedule.plays?.[stage] ?? DEFAULT_PLAYS[stage];
+        return (
+          <label key={stage} className="field-row">
+            <span>Plays: {STAGE_LABEL[stage]}</span>
+            <select className="input" value={n} onChange={(e) => set({ plays: { ...schedule.plays, [stage]: Number(e.target.value) } })}>
+              {Array.from({ length: MAX_PLAYS }, (_, i) => i + 1).map((k) => (
+                <option key={k} value={k}>
+                  {k === 1 ? "once" : `${k} times`}
+                </option>
+              ))}
+            </select>
+          </label>
+        );
+      })}
       <label className="field-row">
         <span>Time to answer</span>
         <select className="input" value={schedule.answerTime ?? 0} onChange={(e) => set({ answerTime: Number(e.target.value) || undefined })}>

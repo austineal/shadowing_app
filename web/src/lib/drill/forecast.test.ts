@@ -14,13 +14,12 @@ import { dayNumber, learnedPassage } from "./srs";
 import { drillOptions } from "./steps";
 import type { DrillPassage, DrillSchedule } from "../../types";
 
-const opts = drillOptions("full", { paddingMs: 120, gapFactor: 1.3 });
+const opts = drillOptions({ learning: 3, fresh: 1, growing: 1, solid: 1 }, { paddingMs: 120, gapFactor: 1.3 });
 const schedule = (patch: Partial<DrillSchedule> = {}): DrillSchedule => ({
   perDay: 1,
   everyDays: 1,
   minutes: 20,
   newMaterial: true,
-  learning: "full",
   ...patch,
 });
 const at = (day: number, hour: number) => new Date(2026, 4, 10 + day, hour).getTime();

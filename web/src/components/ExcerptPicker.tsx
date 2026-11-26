@@ -81,7 +81,7 @@ export function ExcerptPicker(props: {
   const keys = schedulesOf(prefs, language);
   const key = chosenKey ?? scheduleForEpisode(prefs, language, props.existing);
   const schedule = prefs?.schedules[key];
-  const opts = drillOptions(schedule?.learning ?? "full", loadDefaultSettings(), schedule?.answerTime ?? 0);
+  const opts = drillOptions(schedule?.plays, loadDefaultSettings(), schedule?.answerTime ?? 0);
   const learnSec = learningSeconds(
     passages.map((p) => phrasesIn(picked, p.start, p.end)),
     opts,

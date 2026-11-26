@@ -8,7 +8,6 @@ const schedule = (patch: Partial<DrillSchedule>): DrillSchedule => ({
   everyDays: 1,
   minutes: 20,
   newMaterial: true,
-  learning: "full",
   ...patch,
 });
 const at = (day: number, hour: number, min = 0) => new Date(2026, 4, 4 + day, hour, min).getTime();

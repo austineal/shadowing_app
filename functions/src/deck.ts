@@ -64,7 +64,7 @@ function parseManifest(json: unknown): ManifestCard[] {
 }
 
 /** The schedule a language gets when its first drill is added (as DEFAULT_SCHEDULE in the web app). */
-const DEFAULT_SCHEDULE = { perDay: 1, everyDays: 1, minutes: 20, newMaterial: true, learning: "full" };
+const DEFAULT_SCHEDULE = { perDay: 1, everyDays: 1, minutes: 20, newMaterial: true };
 
 /**
  * Adds the deck to the language's drills, unless it's there already (a rebuild): every card, in

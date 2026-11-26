@@ -146,7 +146,11 @@ unaffected.
   language is learned, the library links to the next suggestion in the same episode.
 - **Sessions.** Each language has its own schedule (**Drill schedules** in the
   library): how often it comes up (up to three times a day, down to weekly), how long
-  a session is, whether it learns new material, and a full or light learning drill.
+  a session is, whether it learns new material, and how many times each phrase or
+  card plays at each stage (1–10; by default 5 while being learned, 3 just learned,
+  2 growing, 1 solid). Learning plays are listen-and-repeat (the first two slowed when
+  there are more than two); in reviews the answer plays that many times, with a pause
+  to repeat it between plays.
   Languages on the same every-few-days rhythm take turns. The library's **Drills** box
   shows which are due. A session reviews due passages first (most overdue first, then
   in story order, each led in by the phrase before it), then learns new passages of the

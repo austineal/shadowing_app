@@ -243,8 +243,8 @@ export interface DrillSchedule {
   minutes: number;
   /** Whether sessions start new passages once the due reviews are done. */
   newMaterial: boolean;
-  /** full: three listen-and-repeat plays, the first two slowed. light: two plays at normal speed. */
-  learning: "full" | "light";
+  /** How many times each phrase or card plays at each stage (1–10); missing stages use DEFAULT_PLAYS. */
+  plays?: Partial<Record<"learning" | "fresh" | "growing" | "solid", number>>;
   /** Extra seconds to answer after each English cue (absent: none). */
   answerTime?: number;
   /** For languages drilled every few days: a day number (see dayNumber) the cycle counts from, so they can take turns. */
